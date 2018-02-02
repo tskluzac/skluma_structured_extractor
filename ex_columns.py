@@ -36,7 +36,6 @@ with open(os.path.abspath(pkl_path)) as model_file:  # Local version
     ni_model = pkl.load(model_file)
 
 
-# TODO: Fix the Null_Inference=True argument.
 def extract_columnar_metadata(file_handle, pass_fail=False, lda_preamble=False, null_inference=False, nulls=None):
     """Get metadata from column-formatted file.
             :param file_handle: (file) open file
