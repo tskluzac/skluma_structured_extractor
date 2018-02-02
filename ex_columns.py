@@ -26,14 +26,14 @@ class ExtractionPassed(Exception):
 
 
 NULL_EPSILON = 1
-container_run = '/src/columns/ni_model.pkl'
-local_run = 'ni_model.pkl'
-pkl_path = "/src/columns/ni_model.pkl"
+# container_run = '/src/columns/ni_model.pkl'
+# local_run = 'ni_model.pkl'
+# pkl_path = "/src/columns/ni_model.pkl"
 
 # load null inference model  # TODO: un-hardcode.
-with open(os.path.abspath(pkl_path)) as model_file:  # Local version
-    # with open(os.path.abspath(local_run)) as model_file:  # Docker version.
-    ni_model = pkl.load(model_file)
+# with open(os.path.abspath(pkl_path)) as model_file:  # Local version
+#     # with open(os.path.abspath(local_run)) as model_file:  # Docker version.
+#     ni_model = pkl.load(model_file)
 
 
 def extract_columnar_metadata(file_handle, pass_fail=False, lda_preamble=False, null_inference=False, nulls=None):
@@ -369,8 +369,8 @@ def inferred_nulls(metadata):
     """Infer the null value of each column given aggregates.
         :param metadata: (dict) metadata dictionary containing aggregates
         :returns: (list(num)) a list containing the null value for each column"""
-
-    return ni_model.predict(ni_data(metadata))
+    return 0
+    #return ni_model.predict(ni_data(metadata))
     #except:
         #print("Null fail")
         #return 0
@@ -412,9 +412,12 @@ def process_structured_file(full_file_path):
 
     with open(full_file_path, 'rU') as file_handle:
         metadata = extract_columnar_metadata(file_handle)
-        print(metadata)
+        #print(metadata)
 
         sub_extr_data, sub_extr = None, None  # Todo: this would be where we notice freetext in the document.
 
     return (metadata, sub_extr_data, sub_extr)
+
+
+#process_structured_file("\\C:\\Users\\Tyler Skluzacek\\PycharmProjects\\skluma_structured_extractor\\test_files\\freetext")
 
