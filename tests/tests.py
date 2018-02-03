@@ -21,21 +21,23 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(metadata, new_json)
         print("Test 0: " + str(t1 - t0) + " seconds.")
 
-    def test_tabs_spaces_commas(self):
-        filename = '/test_files/tabs'
+    def test_tabs_commas_same_output(self):  # DONE.
+        filename1 = cwd + 'tab_delim'
+        filename2 = cwd + 'comma_delim'
         t0 = time.time()
-        #metadata = process_structured_file(filename)[0]
-        #metadata = process_structured_file(filename)[0]
+        # Note: Below is hacky, but close enough for Elastic Search :)
+        metadata1 = str(str(process_structured_file(filename1)[0]).replace('"', '')).replace(' ', '')
+        metadata2 = str(str(process_structured_file(filename2)[0]).replace('"', '')).replace(' ', '')
         t1 = time.time()
-        self.assertEqual(0, 0)
+        self.assertTrue(metadata1 == metadata2 == str(open_json(filename2 + '.json').replace('"', '')).replace(' ', ''))
         print("Test 1: " + str(t1-t0) + " seconds.")
 
-    def test_no_headers(self):
+    def test_no_headers(self):  # DONE.
         filename = cwd + 'no_headers'
         t0 = time.time()
-        # metadata = process_structured_file(filename)[0]
+        metadata = process_structured_file(filename)[0]
         t1 = time.time()
-        self.assertEqual(0, 0)
+        self.assertEqual(str(metadata), open_json(filename + '.json'))
         print("Test 2: " + str(t1 - t0) + " seconds.")
 
     def test_freetext_should_fail(self):  # DONE.
@@ -47,11 +49,11 @@ class ExtractionTests(unittest.TestCase):
         print("Test 3: " + str(t1 - t0) + " seconds.")
 
     def test_compressed_should_fail(self):
-        filename = '/test_files/freetext_header'
+        filename = cwd + 'tarball'
         t0 = time.time()
-        #metadata = process_structured_file(filename)[0]
+        metadata = process_structured_file(filename)[0]
         t1 = time.time()
-        self.assertEqual(0, 0)
+        self.assertEqual(metadata, None)
         print("Test 4: " + str(t1 - t0) + " seconds.")
 
     def test_images_should_fail(self):  # DONE.
@@ -62,21 +64,13 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(metadata, None)
         print("Test 5: " + str(t1 - t0) + " seconds.")
 
-    def test_netCDF_should_fail(self):
-        filename = '/test_files/freetext_header'
+    def test_netCDF_should_fail(self):  # DONE.
+        filename = cwd + "netcdf"
         t0 = time.time()
-        #metadata = process_structured_file(filename)[0]
+        metadata = process_structured_file(filename)[0]
         t1 = time.time()
-        self.assertEqual(0, 0)
+        self.assertEqual(metadata, None)
         print("Test 6: " + str(t1 - t0) + " seconds.")
-
-    def test_big(self):
-        filename = '/test_files/freetext_header'
-        t0 = time.time()
-        #metadata = process_structured_file(filename)[0]
-        t1 = time.time()
-        self.assertEqual(0,0)
-        print("Test 7: " + str(t1-t0) + " seconds.")
 
 def open_json(filename):
     with open(filename) as f:
