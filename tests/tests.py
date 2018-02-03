@@ -1,11 +1,17 @@
 
 import json
 import os
+import sys
 import time
 import unittest
+
+sys.path.insert(0, '../')
 from ex_columns import process_structured_file
 
-cwd = os.getcwd() + '\\' + 'test_files' + '\\'
+# Uncomment the top for Windows. Use the second for OSx/Linux
+# cwd = os.getcwd() + '\\' + 'test_files' + '\\'
+cwd = os.getcwd() + '/test_files/'
+
 
 class ExtractionTests(unittest.TestCase):
 
