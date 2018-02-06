@@ -36,7 +36,7 @@ NULL_EPSILON = 1
 #     ni_model = pkl.load(model_file)
 
 
-def extract_columnar_metadata(file_handle, pass_fail=False, lda_preamble=False, null_inference=False, nulls=None):
+def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_inference=False, nulls=None):
     """Get metadata from column-formatted file.
             :param file_handle: (file) open file
             :param pass_fail: (bool) whether to exit after ascertaining file class
@@ -48,20 +48,19 @@ def extract_columnar_metadata(file_handle, pass_fail=False, lda_preamble=False, 
 
     try:
         return _extract_columnar_metadata(
-            file_handle, ",",
+            data, ",",
             pass_fail=pass_fail, lda_preamble=lda_preamble, null_inference=null_inference, nulls=nulls
         )
     except ExtractionFailed:
         try:
             return _extract_columnar_metadata(
-                file_handle, "\t",
+                data, "\t",
                 pass_fail=pass_fail, lda_preamble=lda_preamble, null_inference=null_inference, nulls=nulls
             )
         except ExtractionFailed:
-
             try:
                 return _extract_columnar_metadata(
-                    file_handle, " ",
+                    data, " ",
                     pass_fail=pass_fail, lda_preamble=lda_preamble, null_inference=null_inference, nulls=nulls
                 )
 
@@ -69,11 +68,13 @@ def extract_columnar_metadata(file_handle, pass_fail=False, lda_preamble=False, 
                 pass
 
 
-def _extract_columnar_metadata(file_handle, delimiter, pass_fail=False, lda_preamble=False,
+def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=False,
                                null_inference=False, nulls=None):
     """helper method for extract_columnar_metadata that uses a specific delimiter."""
 
-    reverse_reader = ReverseReader(file_handle, delimiter=delimiter)
+    #reverse_reader = ReverseReader(file_handle, delimiter=delimiter)
+    reverse_reader = None
+    reverse_reader = [fields(line, delimiter) for line in data] [::-1] #reversed(file_handle.readlines())
 
     # base dictionary in which to store all the metadata
     metadata = {"columns": {}}
@@ -98,14 +99,14 @@ def _extract_columnar_metadata(file_handle, delimiter, pass_fail=False, lda_prea
 
     # save the last `end_rows` rows to try to parse them later
     # if there are less than `end_rows` rows, you must catch the StopIteration exception
-    last_rows = []
-    try:
-        last_rows = [reverse_reader.next() for i in range(0, end_rows)]
-    except StopIteration:
-        pass
+    last_rows = reverse_reader[0:end_rows]
+    #try:
+    #    last_rows = [reverse_reader.next() for i in range(0, end_rows)]
+    #except StopIteration:
+    #    pass
 
     # now we try to extract a table from the remaining n-`end_rows` rows
-    for row in reverse_reader:
+    for row in reverse_reader[end_rows:] :
         # if row is not the same length as previous row, raise an error showing this is not a valid columnar file
         if not is_first_row and row_length != len(row):
             # tables are not worth extracting if under this row threshold
@@ -296,45 +297,14 @@ def add_final_aggregates(metadata, col_aliases, col_types, num_rows):
             ) if len(metadata["columns"][col_alias]["min"]) > 0 else None
             metadata["columns"][col_alias].pop("total")
 
-class ReverseReader:
-    """Reads column-formatted files in reverse as lists of fields.
-        :param file_handle: (file) open file
-        :param delimiter: (string) delimiting character """
-
-    def __init__(self, file_handle, delimiter=","):
-        self.fh = file_handle
-        self.fh.seek(0, os.SEEK_END)
-        self.delimiter = delimiter
-        self.position = self.fh.tell()
-        self.prev_position = self.fh.tell()
-
-    @staticmethod
-    def fields(line, delim):
-        # if space-delimited, do not keep whitespace fields, otherwise do
-        fields = [field.strip() for field in re.split(delim if delim != " " else "\\s", line)]
-        if delim in [" ", "\t", "\n"]:
-            fields = filter(lambda f: f != "", fields)
-        return fields
-
-    def next(self):
-        line = ''
-        if self.position <= 0:
-            raise StopIteration
-        self.prev_position = self.position
-        while self.position >= 0:
-            self.fh.seek(self.position)
-            next_char = self.fh.read(1)
-            if next_char in ['\n', '\r']:
-                self.position -= 1
-                if len(line) > 1:
-                    return self.fields(line[::-1], self.delimiter)
-            else:
-                line += next_char
-                self.position -= 1
-        return self.fields(line[::-1], self.delimiter)
-
-    def __iter__(self):
-        return self
+def fields(line, delim):
+    # if space-delimited, do not keep whitespace fields, otherwise do
+    fields = [field.strip(' \n\r\t') for field in line.split(delim)]
+    #if delim in [" ", "\t", "\n"]:
+    #    fields = filter(lambda f: f != "", fields)
+    #print (fields)
+    #exit(0)
+    return fields
 
 def is_header_row(row):
     """Determine if row is a header row by checking that it contains no fields that are
@@ -411,7 +381,8 @@ def process_structured_file(full_file_path):
         :param str full_file_path path to the file on the system to be extracted. '''
 
     with open(full_file_path, 'rU') as file_handle:
-        metadata = extract_columnar_metadata(file_handle)
+        data = file_handle.readlines()
+        metadata = extract_columnar_metadata(data)
         #print(metadata)
 
         sub_extr_data, sub_extr = None, None  # Todo: this would be where we notice freetext in the document.
