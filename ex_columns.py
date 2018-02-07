@@ -10,7 +10,7 @@
 from multiprocessing import Pool
 import os
 import re
-import StringIO #TODO: Make work in Python3.
+# import StringIO #TODO: Make work in Python3.
 
 from decimal import Decimal
 from heapq import nsmallest, nlargest
@@ -260,35 +260,58 @@ def get_header_info(data):
     # Step 5. Return freetext_line, header_line, num lines.
 
 
-def seek_preamble(data, delim, start_point, prev_val=0): #TODO: check last delim finding w/ new one. 
-    if start_point == prev_val:
-        return start_point
+def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: check last delim finding w/ new one.
+
+    if start_point - prev_val <= 1:
+
+        data.seek(0)
+
+        if last_move == "UP":
+            for i, line in enumerate(data):
+                if i == (prev_val - 1): #or prev_val:
+                    print(i, line)
+
+                if i > prev_val:
+                    break
+
+            return prev_val
+
+        elif last_move == "DOWN":
+
+            for i, line in enumerate(data):
+                if (i == start_point + 1):  # or prev_val:
+                    print(i, line)
+
+                if i > start_point:
+                    break
 
     else:
         midpoint = int((start_point+prev_val)/2)
         split_vals = []
-        print(midpoint)
+        #print(start_point, prev_val, midpoint)
+
         # Get midpoint-1, midpoint, midpoint+1 lines.
+        data.seek(0)
         for i, line in enumerate(data):
             if i == midpoint-1 or i == midpoint or i == midpoint + 1:  # TODO: edge cases (first and last lines)
-                print(line.split(delim))
+                #print(line.split(delim))
                 split_vals.append(len(line.split(delim)))  # Append the number of split items.
             elif i > midpoint + 1:
-                print("WAPOW")
-                print(split_vals)
+                #print("WAPOW")
+                #print(split_vals)
                 break
 
         # Check if all three values are identical.
-        print(len(split_vals))
+        #print(len(split_vals))
         if split_vals.count(split_vals[0]) == len(split_vals):
             # Move UP the file.
-            print("UP")
-            seek_preamble(data, delim, midpoint, prev_val)
+            #print("UP")
+            seek_preamble(data, delim, midpoint, prev_val, "UP")
 
         else:
-            print("DOWN")
+            #print("DOWN")
             # Move DOWN the file.
-            seek_preamble(data, delim, start_point, midpoint)
+            seek_preamble(data, delim, start_point, midpoint, "DOWN")
 
 
 def add_row_to_aggregates(metadata, row, col_aliases, col_types, nulls=None):
@@ -460,5 +483,5 @@ def process_structured_file(full_file_path):
 
 
 #process_structured_file('/home/ubuntu/skluma_structured_extractor/tests/test_files/freetext_header')
-# with open('/home/ubuntu/skluma_structured_extractor/tests/test_files/freetext_header', 'rU') as f:
+# with open('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header', 'rU') as f:
 #     print(seek_preamble(f, ',', 135, 0))
