@@ -50,7 +50,7 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
     # Step 1: find (a) location of the freetext header, (b) normal header, (c) delimiter.
 
 
-    # header_info = get_header_info(data, delim=',')  # TODO: return header_info.
+    header_info = get_header_info(data, delim=',')  # TODO: return header_info.
 
 
     # Step 2: create thread_pool of 10k line chunks.
@@ -254,8 +254,11 @@ def get_header_info(data, delim):
 
     # Step 2. Binary search the file.
     if line_count >= 5: #set arbitrary min value.
+        # A. Get the length of the preamble.
         preamble_length = seek_preamble(data, delim, line_count)
-        print(preamble_length)
+        # B. Determine whether the next line is a freetext header
+        #Convert to fields, then check if is_header_row().
+
         return preamble_length
 
 
