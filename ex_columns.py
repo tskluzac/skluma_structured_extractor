@@ -252,7 +252,6 @@ def get_header_info(data):
         seek_preamble(line_count)
 
 
-
     # Step 3. Start with three lines in middle. If splits are ==, then go down. It not, then go up. 
 
     # Step 4. See if line after free-text header is HEADER values.
@@ -266,50 +265,44 @@ def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: 
 
         data.seek(0)
 
-        if last_move == "UP":
-            for i, line in enumerate(data):
-                if i == (prev_val - 1): #or prev_val:
-                    print(i, line)
+        line_counts = []
+        for i, line in enumerate(data):
+            if i in range(prev_val-5, prev_val+5):
+                line_counts.append((i, len(line.split(delim))))
+            elif i> prev_val + 5:
+                break
 
-                if i > prev_val:
-                    break
+        ### Now walk through the lines to find the line with less freetext data than others.
+        line_counts.reverse()
 
-            return prev_val
+        last_count = line_counts[0][1]
+        for item in line_counts:
+            if item[1] == last_count:
+                last_count = item[1]
+                pass
 
-        elif last_move == "DOWN":
-
-            for i, line in enumerate(data):
-                if (i == start_point + 1):  # or prev_val:
-                    print(i, line)
-
-                if i > start_point:
-                    break
+            else:
+                print(item[1])
+                return item[1]
 
     else:
         midpoint = int((start_point+prev_val)/2)
         split_vals = []
-        #print(start_point, prev_val, midpoint)
 
         # Get midpoint-1, midpoint, midpoint+1 lines.
         data.seek(0)
         for i, line in enumerate(data):
             if i == midpoint-1 or i == midpoint or i == midpoint + 1:  # TODO: edge cases (first and last lines)
-                #print(line.split(delim))
                 split_vals.append(len(line.split(delim)))  # Append the number of split items.
             elif i > midpoint + 1:
-                #print("WAPOW")
-                #print(split_vals)
                 break
 
         # Check if all three values are identical.
-        #print(len(split_vals))
         if split_vals.count(split_vals[0]) == len(split_vals):
             # Move UP the file.
-            #print("UP")
             seek_preamble(data, delim, midpoint, prev_val, "UP")
 
         else:
-            #print("DOWN")
             # Move DOWN the file.
             seek_preamble(data, delim, start_point, midpoint, "DOWN")
 
@@ -483,5 +476,5 @@ def process_structured_file(full_file_path):
 
 
 #process_structured_file('/home/ubuntu/skluma_structured_extractor/tests/test_files/freetext_header')
-# with open('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header', 'rU') as f:
-#     print(seek_preamble(f, ',', 135, 0))
+with open('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header', 'rU') as f:
+    seek_preamble(f, ',', 135, 0)
