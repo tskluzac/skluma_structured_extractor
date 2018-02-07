@@ -50,7 +50,7 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
     # Step 1: find (a) location of the freetext header, (b) normal header, (c) delimiter.
 
 
-    header_info = get_header_info(data)
+    # header_info = get_header_info(data, delim=',')  # TODO: return header_info.
 
 
     # Step 2: create thread_pool of 10k line chunks.
@@ -61,7 +61,7 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
     #for m_item in result:
     #   print(m_item)
 
-    # Step 3: run metadata extractor on each!
+    # Step 3: run metadata extractor on each chunk
 
 
     try:
@@ -90,9 +90,14 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
                                null_inference=False, nulls=None):
     """helper method for extract_columnar_metadata that uses a specific delimiter."""
 
+
+    header_info = get_header_info(data, delimiter)
+
+    print(header_info)
+
     #reverse_reader = ReverseReader(file_handle, delimiter=delimiter)
     reverse_reader = None
-    reverse_reader = [fields(line, delimiter) for line in data] [::-1] #reversed(file_handle.readlines())
+    reverse_reader = [fields(line, delimiter) for line in data] [::-1]  #reversed(file_handle.readlines())
 
     # base dictionary in which to store all the metadata
     metadata = {"columns": {}}
@@ -104,7 +109,7 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
     # number of rows to skip at the end of the file before reading
     end_rows = 5
     # size of extracted free-text preamble in characters
-    preamble_size = 1000
+    # preamble_size = 1000
 
     headers = []
     col_types = []
@@ -113,7 +118,7 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
     # used to check if all rows are the same length, if not, this is not a valid columnar file
     row_length = 0
     is_first_row = True
-    fully_parsed = True
+    # fully_parsed = True
 
     # save the last `end_rows` rows to try to parse them later
     # if there are less than `end_rows` rows, you must catch the StopIteration exception
@@ -208,29 +213,29 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
                                               nulls=None)
 
     # extract free-text preamble, which may contain headers
-    if lda_preamble and not fully_parsed:
-        # number of characters in file before last un-parse-able row
-        file_handle.seek(reverse_reader.prev_position)
-        remaining_chars = file_handle.tell() - 1
-        # go to start of preamble
-        if remaining_chars >= preamble_size:
-            file_handle.seek(-preamble_size, 1)
-        else:
-            file_handle.seek(0)
-        preamble = ""
-        # do this `<=` method instead of passing a numerical length argument to read()
-        # in order to avoid multi-byte character encoding difficulties
-        while file_handle.tell() <= reverse_reader.prev_position:
-            preamble += file_handle.read(1)
-        # add preamble to the metadata
-        if len(preamble) > 0:
-            try:
-                # convert the preamble string to a file handle to give to the topic extraction method
-                preamble_file = StringIO.StringIO(preamble)
-                #TODO: Return to Topic and uncomment this.
-                #metadata.update(extract_topic(preamble_file, pass_fail=pass_fail))
-            except (ExtractionPassed, ExtractionFailed):
-                pass
+    # if lda_preamble and not fully_parsed:
+    #     # number of characters in file before last un-parse-able row
+    #     file_handle.seek(reverse_reader.prev_position)
+    #     remaining_chars = file_handle.tell() - 1
+    #     # go to start of preamble
+    #     if remaining_chars >= preamble_size:
+    #         file_handle.seek(-preamble_size, 1)
+    #     else:
+    #         file_handle.seek(0)
+    #     preamble = ""
+    #     # do this `<=` method instead of passing a numerical length argument to read()
+    #     # in order to avoid multi-byte character encoding difficulties
+    #     while file_handle.tell() <= reverse_reader.prev_position:
+    #         preamble += file_handle.read(1)
+    #     # add preamble to the metadata
+    #     if len(preamble) > 0:
+    #         try:
+    #             # convert the preamble string to a file handle to give to the topic extraction method
+    #             preamble_file = StringIO.StringIO(preamble)
+    #             #TODO: Return to Topic and uncomment this.
+    #             #metadata.update(extract_topic(preamble_file, pass_fail=pass_fail))
+    #         except (ExtractionPassed, ExtractionFailed):
+    #             pass
 
     # remove empty string aggregates that were placeholders in null inference
     for key in metadata["columns"].keys():
@@ -241,7 +246,7 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
     return metadata
 
 
-def get_header_info(data):
+def get_header_info(data, delim):
     # Step 1. Ascertain number of lines in file.
     line_count = 0
     for line in data:
@@ -249,7 +254,9 @@ def get_header_info(data):
 
     # Step 2. Binary search the file.
     if line_count >= 5: #set arbitrary min value.
-        seek_preamble(line_count)
+        preamble_length = seek_preamble(data, delim, line_count)
+        print(preamble_length)
+        return preamble_length
 
 
     # Step 3. Start with three lines in middle. If splits are ==, then go down. It not, then go up. 
@@ -260,30 +267,38 @@ def get_header_info(data):
 
 
 def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: check last delim finding w/ new one.
+    """
+    Takes an open file_handle and num_lines in file; returns last line of freetext header.
+    :param data -- open file handle
+    :param delim -- delimiter to try
+    :param start_point -- length of file #TODO: Rename
+    :param prev_val -- the 'top' of where we look #TODO: Rename.
+    :returns None if no ft header, last line of header if ft header.
+    """
 
     if start_point - prev_val <= 1:
-
         data.seek(0)
-
         line_counts = []
         for i, line in enumerate(data):
             if i in range(prev_val-5, prev_val+5):
                 line_counts.append((i, len(line.split(delim))))
-            elif i> prev_val + 5:
+            elif i > prev_val + 5:
                 break
 
         ### Now walk through the lines to find the line with less freetext data than others.
         line_counts.reverse()
 
         last_count = line_counts[0][1]
+
         for item in line_counts:
             if item[1] == last_count:
                 last_count = item[1]
+
                 pass
 
             else:
-                print(item[1])
-                return item[1]
+                print("Should obviously change the answer")
+                return item[0]
 
     else:
         midpoint = int((start_point+prev_val)/2)
@@ -292,7 +307,7 @@ def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: 
         # Get midpoint-1, midpoint, midpoint+1 lines.
         data.seek(0)
         for i, line in enumerate(data):
-            if i == midpoint-1 or i == midpoint or i == midpoint + 1:  # TODO: edge cases (first and last lines)
+            if i == midpoint-1 or i == midpoint or i == midpoint + 1:
                 split_vals.append(len(line.split(delim)))  # Append the number of split items.
             elif i > midpoint + 1:
                 break
@@ -300,11 +315,12 @@ def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: 
         # Check if all three values are identical.
         if split_vals.count(split_vals[0]) == len(split_vals):
             # Move UP the file.
-            seek_preamble(data, delim, midpoint, prev_val, "UP")
+            return(seek_preamble(data, delim, midpoint, prev_val, "UP"))
 
         else:
             # Move DOWN the file.
-            seek_preamble(data, delim, start_point, midpoint, "DOWN")
+            return(seek_preamble(data, delim, start_point, midpoint, "DOWN"))
+
 
 
 def add_row_to_aggregates(metadata, row, col_aliases, col_types, nulls=None):
@@ -466,8 +482,8 @@ def process_structured_file(full_file_path):
         :param str full_file_path path to the file on the system to be extracted. '''
 
     with open(full_file_path, 'rU') as file_handle:
-        data = file_handle.readlines()
-        metadata = extract_columnar_metadata(data)
+        #data = file_handle.readlines()
+        metadata = extract_columnar_metadata(file_handle)
         #print(metadata)
 
         sub_extr_data, sub_extr = None, None  # Todo: this would be where we notice freetext in the document.
@@ -475,6 +491,6 @@ def process_structured_file(full_file_path):
     return (metadata, sub_extr_data, sub_extr)
 
 
-#process_structured_file('/home/ubuntu/skluma_structured_extractor/tests/test_files/freetext_header')
-with open('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header', 'rU') as f:
-    seek_preamble(f, ',', 135, 0)
+process_structured_file('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header')
+# with open('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header', 'rU') as f:
+#     seek_preamble(f, ',', 135, 0)
