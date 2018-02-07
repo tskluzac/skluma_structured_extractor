@@ -7,7 +7,7 @@
     Last Edited: 01/21/2018
 """
 
-
+from multiprocessing import Pool
 import os
 import re
 import StringIO #TODO: Make work in Python3.
@@ -45,6 +45,24 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
             :param nulls: (list(int)) list of null indices
             :returns: (dict) ascertained metadata
             :raises: (ExtractionFailed) if the file cannot be read as a columnar file"""
+
+
+    # Step 1: find (a) location of the freetext header, (b) normal header, (c) delimiter.
+
+
+    header_info = get_header_info(data)
+
+
+    # Step 2: create thread_pool of 10k line chunks.
+
+    pool = Pool(processes = 2)
+    #result = pool.map(doubler, numbers)
+
+    #for m_item in result:
+    #   print(m_item)
+
+    # Step 3: run metadata extractor on each!
+
 
     try:
         return _extract_columnar_metadata(
@@ -222,6 +240,57 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
     #print(metadata)
     return metadata
 
+
+def get_header_info(data):
+    # Step 1. Ascertain number of lines in file.
+    line_count = 0
+    for line in data:
+        line_count += 1
+
+    # Step 2. Binary search the file.
+    if line_count >= 5: #set arbitrary min value.
+        seek_preamble(line_count)
+
+
+
+    # Step 3. Start with three lines in middle. If splits are ==, then go down. It not, then go up. 
+
+    # Step 4. See if line after free-text header is HEADER values.
+
+    # Step 5. Return freetext_line, header_line, num lines.
+
+
+def seek_preamble(data, delim, start_point, prev_val=0): #TODO: check last delim finding w/ new one. 
+    if start_point == prev_val:
+        return start_point
+
+    else:
+        midpoint = int((start_point+prev_val)/2)
+        split_vals = []
+        print(midpoint)
+        # Get midpoint-1, midpoint, midpoint+1 lines.
+        for i, line in enumerate(data):
+            if i == midpoint-1 or i == midpoint or i == midpoint + 1:  # TODO: edge cases (first and last lines)
+                print(line.split(delim))
+                split_vals.append(len(line.split(delim)))  # Append the number of split items.
+            elif i > midpoint + 1:
+                print("WAPOW")
+                print(split_vals)
+                break
+
+        # Check if all three values are identical.
+        print(len(split_vals))
+        if split_vals.count(split_vals[0]) == len(split_vals):
+            # Move UP the file.
+            print("UP")
+            seek_preamble(data, delim, midpoint, prev_val)
+
+        else:
+            print("DOWN")
+            # Move DOWN the file.
+            seek_preamble(data, delim, start_point, midpoint)
+
+
 def add_row_to_aggregates(metadata, row, col_aliases, col_types, nulls=None):
     """Adds row data to aggregates.
         :param metadata: (dict) metadata dictionary to add to
@@ -389,3 +458,7 @@ def process_structured_file(full_file_path):
 
     return (metadata, sub_extr_data, sub_extr)
 
+
+#process_structured_file('/home/ubuntu/skluma_structured_extractor/tests/test_files/freetext_header')
+# with open('/home/ubuntu/skluma_structured_extractor/tests/test_files/freetext_header', 'rU') as f:
+#     print(seek_preamble(f, ',', 135, 0))
