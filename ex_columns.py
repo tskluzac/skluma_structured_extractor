@@ -16,6 +16,7 @@ from decimal import Decimal
 from heapq import nsmallest, nlargest
 import pandas as pd
 import pickle as pkl
+import struct_utils
 
 
 class ExtractionFailed(Exception):
@@ -27,14 +28,6 @@ class ExtractionPassed(Exception):
 
 
 NULL_EPSILON = 1
-# container_run = '/src/columns/ni_model.pkl'
-# local_run = 'ni_model.pkl'
-# pkl_path = "/src/columns/ni_model.pkl"
-#
-# # load null inference model  # TODO: un-hardcode.
-# with open(os.path.abspath(pkl_path)) as model_file:  # Local version
-#     # with open(os.path.abspath(local_run)) as model_file:  # Docker version.
-#     ni_model = pkl.load(model_file)
 
 
 def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_inference=False, nulls=None):
@@ -46,8 +39,6 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
             :param nulls: (list(int)) list of null indices
             :returns: (dict) ascertained metadata
             :raises: (ExtractionFailed) if the file cannot be read as a columnar file"""
-
-
 
     # pool = Pool(processes = 2)
     # result = pool.map(doubler, numbers)
@@ -71,7 +62,6 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
 
             else:  # elif header_col_labels == None.
                 dataframes = get_dataframes(data2, header=None)
-
 
 
         return _extract_columnar_metadata(
@@ -98,16 +88,7 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
 def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=False,
                                null_inference=False, nulls=None):
     """helper method for extract_columnar_metadata that uses a specific delimiter."""
-
-
-    header_info = get_header_info(data, delimiter)
-
-    #print(header_info)
-
-    #reverse_reader = ReverseReader(file_handle, delimiter=delimiter)
-    reverse_reader = None
-    reverse_reader = [fields(line, delimiter) for line in data] [::-1]  #reversed(file_handle.readlines())
-
+    reverse_reader = [struct_utils.fields(line, delimiter) for line in data] [::-1]  #reversed(file_handle.readlines())
     # base dictionary in which to store all the metadata
     metadata = {"columns": {}}
 
@@ -117,8 +98,6 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
     ni_rows = 100
     # number of rows to skip at the end of the file before reading
     end_rows = 5
-    # size of extracted free-text preamble in characters
-    # preamble_size = 1000
 
     headers = []
     col_types = []
@@ -136,7 +115,6 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
     #    last_rows = [reverse_reader.next() for i in range(0, end_rows)]
     #except StopIteration:
     #    pass
-
     # now we try to extract a table from the remaining n-`end_rows` rows
     for row in reverse_reader[end_rows:] :
         # if row is not the same length as previous row, raise an error showing this is not a valid columnar file
@@ -150,16 +128,14 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
                 break
         # update row length for next check
         row_length = len(row)
-
         if is_first_row:
             # make column aliases so that we can create aggregates even for unlabelled columns
             col_aliases = ["__{}__".format(i) for i in range(0, row_length)]
             # type check the first row to decide which aggregates to use
-            col_types = ["num" if is_number(field) else "str" for field in row]
+            col_types = ["num" if struct_utils.is_number(field) else "str" for field in row]
             is_first_row = False
-
         # if the row is a header row, add all its fields to the headers list
-        if is_header_row(row):
+        if struct_utils.is_header_row(row):
             # tables are likely not representative of the file if under this row threshold, don't extract metadata
             if num_rows < min_rows:
                 raise ExtractionFailed
@@ -177,7 +153,7 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
         else:  # is a row of values
             num_rows += 1
             if not pass_fail:
-                add_row_to_aggregates(metadata, row, col_aliases, col_types, nulls=nulls)
+                struct_utils.add_row_to_aggregates(metadata, row, col_aliases, col_types, nulls=nulls)
 
         if pass_fail and num_rows >= min_rows:
             raise ExtractionPassed
@@ -185,36 +161,30 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
         # we've taken enough rows to use aggregates for null inference
             #TODO: Add back null inference (1 of 2)
         if null_inference and num_rows >= ni_rows:
-            add_final_aggregates(metadata, col_aliases, col_types, num_rows)
+            struct_utils.add_final_aggregates(metadata, col_aliases, col_types, num_rows)
             return _extract_columnar_metadata(file_handle, delimiter, pass_fail=pass_fail,
                                               lda_preamble=lda_preamble,
                                               null_inference=False,
-                                              nulls=inferred_nulls(metadata))
-
+                                              nulls=struct_utils.inferred_nulls(metadata)) #This commented out in struct
     # extraction passed but there are too few rows
     if num_rows < min_rows:
         raise ExtractionFailed
-
     # add the originally skipped rows into the aggregates
     for row in last_rows:
         if len(row) == row_length:
-            add_row_to_aggregates(metadata, row, col_aliases, col_types, nulls=nulls)
-
-    add_final_aggregates(metadata, col_aliases, col_types, num_rows)
-
+            struct_utils.add_row_to_aggregates(metadata, row, col_aliases, col_types, nulls=nulls)
+    struct_utils.add_final_aggregates(metadata, col_aliases, col_types, num_rows)
     # add header list to metadata
     if len(headers) > 0:
         metadata["headers"] = list(set(headers))
-
     # we've parsed the whole table, now do null inference
-
     #TODO: Add back inferred nulls.
     if null_inference:
         try:
             return _extract_columnar_metadata(file_handle, delimiter, pass_fail=pass_fail,
                                               lda_preamble=lda_preamble,
                                               null_inference=False,
-                                              nulls=inferred_nulls(metadata))
+                                              nulls=struct_utils.inferred_nulls(metadata))
         except:
             return _extract_columnar_metadata(file_handle, delimiter, pass_fail=pass_fail,
                                               lda_preamble=lda_preamble,
@@ -234,48 +204,37 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
 # TODO: Can I do this without reopening the file?
 def get_dataframes(filename, header, delim, file_pointer, skiprows = 0, dataframe_size = 1000):
 
-    header = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] #TODO: Un-hardcode this.
+    header = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] #TODO: Un-hardcode this. Should get list of header_nms.
 
     iter_csv = pd.read_csv(filename, sep=delim, chunksize=100, header=None, skiprows=file_pointer)
-    for chunk in iter_csv:
-        print(chunk) #Commenting out as this works just fine.
 
     return iter_csv
 
 
 # TODO: Currently assuming short freetext headers. This will take some time for long one (full re-reads)
 def get_header_info(data, delim):
-
     # Get a line count.
     line_count = 0
     for line in data:
         line_count += 1
-
     # Figure out the length of file via binary search (in"seek_preamble")
     if line_count >= 5: #set arbitrary min value or bin-search not useful.
-
         # A. Get the length of the preamble.
         preamble_length = seek_preamble(data, delim, line_count)
-
-
         # B. Determine whether the next line is a freetext header
         data.seek(0)
-
         for i, line in enumerate(data):
             if i == preamble_length+1:  # +1 since that's one after the preamble.
                 print("The header row is: " + str(line))
-                header = is_header_row(fields(line, delim))
+                header = struct_utils.is_header_row(struct_utils.fields(line, delim))
                 if header == True:
-                    header = fields(line,delim)
+                    header = struct_utils.fields(line,delim)
                 else:
                     header = None
 
             elif i > preamble_length:
                 break
-
         return (preamble_length, header, line_count)
-
-
 
 
 def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: check last delim finding w/ new one.
@@ -287,7 +246,6 @@ def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: 
     :param prev_val -- the 'top' of where we look #TODO: Rename.
     :returns None if no ft header, last line of header if ft header.
     """
-
     if start_point - prev_val <= 1:
         data.seek(0)
         line_counts = []
@@ -296,22 +254,16 @@ def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: 
                 line_counts.append((i, len(line.split(delim))))
             elif i > prev_val + 5:
                 break
-
         ### Now walk through the lines to find the line with less freetext data than others.
         line_counts.reverse()
-
         last_count = line_counts[0][1]
-
         for item in line_counts:
             if item[1] == last_count:
                 last_count = item[1]
-
                 pass
-
             else:
                 print("Should obviously change the answer")
                 return item[0]
-
     else:
         midpoint = int((start_point+prev_val)/2)
         split_vals = []
@@ -323,139 +275,14 @@ def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: 
                 split_vals.append(len(line.split(delim)))  # Append the number of split items.
             elif i > midpoint + 1:
                 break
-
         # Check if all three values are identical.
         if split_vals.count(split_vals[0]) == len(split_vals):
             # Move UP the file.
             return(seek_preamble(data, delim, midpoint, prev_val, "UP"))
-
         else:
             # Move DOWN the file.
             return(seek_preamble(data, delim, start_point, midpoint, "DOWN"))
 
-
-def add_row_to_aggregates(metadata, row, col_aliases, col_types, nulls=None):
-    """Adds row data to aggregates.
-        :param metadata: (dict) metadata dictionary to add to
-        :param row: (list(str)) row of strings to add
-        :param col_aliases: (list(str)) list of headers
-        :param nulls: (list(num)) list giving the null value to avoid for each column
-        :param col_types: (list("num" | "str")) list of header types"""
-
-    for i in range(0, len(row)):
-        value = row[i]
-        col_alias = col_aliases[i]
-        col_type = col_types[i]
-        is_first_row = col_alias not in metadata["columns"].keys()
-
-        if col_type == "num":
-            # start off the metadata if this is the first row of values
-            if is_first_row:
-                metadata["columns"][col_alias] = {
-                    "min": [float("inf"), float("inf"), float("inf")],
-                    "max": [None, None, None],
-                    "total": 0
-                }
-            # cast the field to a number to do numerical aggregates
-            # the try except is used to pass over textual and blank space nulls on which type coercion will fail
-            try:
-                value = float(value)
-                if float(value) == int(value):
-                    value = int(value)
-            except ValueError:
-                # skips adding to aggregates
-                continue
-
-            if nulls is not None:
-                null = nulls[i]
-                # if value is (close enough to) null, don't add it to the aggregates
-                # 0 is returned by the model if there is no null value
-                if null != 0 and abs(value - null) < NULL_EPSILON:
-                    continue
-
-            # add row data to existing aggregates
-            mins = list(set(metadata["columns"][col_alias]["min"] + [value]))
-            maxes = list(set(metadata["columns"][col_alias]["max"] + [value]))
-            metadata["columns"][col_alias]["min"] = nsmallest(3, mins)
-            metadata["columns"][col_alias]["max"] = nlargest(3, maxes)
-            metadata["columns"][col_alias]["total"] += value
-
-        elif col_type == "str":
-            if is_first_row:
-                metadata["columns"][col_alias] = {}
-            # TODO: add string-specific field aggregates?
-            pass
-
-def add_final_aggregates(metadata, col_aliases, col_types, num_rows):
-    """Adds row data to aggregates.
-        :param metadata: (dict) metadata dictionary to add to
-        :param col_aliases: (list(str)) list of headers
-        :param col_types: (list("num" | "str")) list of header types
-        :param num_rows: (int) number of value rows"""
-
-    # calculate averages for numerical columns
-    for i in range(0, len(col_aliases)):
-        col_alias = col_aliases[i]
-
-        if col_types[i] == "num":
-            metadata["columns"][col_alias]["max"] = [val for val in metadata["columns"][col_alias]["max"]
-                                                     if val is not None]
-            metadata["columns"][col_alias]["min"] = [val for val in metadata["columns"][col_alias]["min"]
-                                                     if val != float("inf")]
-
-            metadata["columns"][col_alias]["avg"] = round(
-                float(metadata["columns"][col_alias]["total"]) / num_rows,
-                max_precision(metadata["columns"][col_alias]["min"] + metadata["columns"][col_alias]["max"])
-            ) if len(metadata["columns"][col_alias]["min"]) > 0 else None
-            metadata["columns"][col_alias].pop("total")
-
-def fields(line, delim):
-    # if space-delimited, do not keep whitespace fields, otherwise do
-    fields = [field.strip(' \n\r\t') for field in line.split(delim)]
-    #if delim in [" ", "\t", "\n"]:
-    #    fields = filter(lambda f: f != "", fields)
-    #print (fields)
-    #exit(0)
-    return fields
-
-def is_header_row(row):
-    """Determine if row is a header row by checking that it contains no fields that are
-    only numeric.
-        :param row: (list(str)) list of fields in row
-        :returns: (bool) whether row is a header row"""
-
-    for field in row:
-        if is_number(field):
-            return False
-    return True
-
-
-def is_number(field):
-    """Determine if a string is a number by attempting to cast to it a float.
-        :param field: (str) field
-        :returns: (bool) whether field can be cast to a number"""
-
-    try:
-        float(field)
-        return True
-    except ValueError:
-        return False
-
-def max_precision(nums):
-    """Determine the maximum precision of a list of floating point numbers.
-        :param nums: (list(float)) list of numbers
-        :return: (int) number of decimal places precision"""
-    return max([abs(Decimal(str(num)).as_tuple().exponent) for num in nums])
-
-def inferred_nulls(metadata):
-    """Infer the null value of each column given aggregates.
-        :param metadata: (dict) metadata dictionary containing aggregates
-        :returns: (list(num)) a list containing the null value for each column"""
-
-    return ni_model.predict(ni_data(metadata))
-    #except:
-        #print("Null fail")
-        #return 0
 
 def ni_data(metadata):
     """Format metadata into a 2D array so that it can be input to the null inference model.
@@ -485,21 +312,6 @@ def ni_data(metadata):
             # col_agg["avg"] if "avg" in col_agg.keys() else 0,
         ]
         for col_alias, col_agg in metadata["columns"].iteritems()]
-
-
-def process_structured_file(full_file_path):
-    ''' Little method to open the file path, unpack structured metadata, and return both metadata and any
-        freetext found in the file.
-        :param str full_file_path path to the file on the system to be extracted. '''
-
-    with open(full_file_path, 'rU') as file_handle:
-        #data = file_handle.readlines()
-        metadata = extract_columnar_metadata(file_handle)
-        #print(metadata)
-
-        sub_extr_data, sub_extr = None, None  # Todo: this would be where we notice freetext in the document.
-
-    return (metadata, sub_extr_data, sub_extr)
 
 
 #process_structured_file('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header')
