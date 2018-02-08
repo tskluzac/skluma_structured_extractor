@@ -10,12 +10,8 @@
 from multiprocessing import Pool
 import os
 import re
-# import StringIO #TODO: Make work in Python3.
 
-from decimal import Decimal
-from heapq import nsmallest, nlargest
 import pandas as pd
-import pickle as pkl
 import struct_utils
 
 
@@ -32,7 +28,7 @@ NULL_EPSILON = 1
 
 def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_inference=False, nulls=None):
     """Get metadata from column-formatted file.
-            :param file_handle: (file) open file
+            :param data: (str) a path to an unopened file.
             :param pass_fail: (bool) whether to exit after ascertaining file class
             :param lda_preamble: (bool) whether to collect the free-text preamble at the start of the file
             :param null_inference: (bool) whether to use the null inference model to remove nulls
@@ -50,19 +46,31 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
 
         with open(data, 'rU') as data2:
 
+            print("[DEBUG] Getting header data.")
             header_info = get_header_info(data2, delim=',')  #TODO: use max-fields of ',', ' ', or '\t'???
             freetext_offset = header_info[0]
             header_col_labels = header_info[1]
             line_count = header_info[2]
-
+            print("[DEBUG] Successfully got header data!")
 
             # TODO: TYLER -- start here.
+            print("[DEBUG] Getting dataframes")
             if header_col_labels != None:
-                dataframes = get_dataframes(data2, header=header_col_labels)
+                dataframes = get_dataframes(data2, header=header_col_labels, delim=',', skip_rows=freetext_offset)
 
             else:  # elif header_col_labels == None.
-                dataframes = get_dataframes(data2, header=None)
+                dataframes = get_dataframes(data2, header=None, delim=',', skip_rows=freetext_offset)
+            print("[DEBUG] Successfully got dataframes!")
 
+            for item in dataframes:
+                print(item)
+
+            # Now process each data frame.
+            print("[DEBUG] Extracting metadata using *m* processes...")
+            pool = Pool(processes=2)
+            result = pool.map(_extract_columnar_metadata, dataframes) #TODO: Cannot yet feed _extract_columnar metadata a dataframe!
+            for m_item in result: #TODO: Not returning processed metadata.
+                print(m_item)
 
         return _extract_columnar_metadata(
             data, ",",
@@ -83,7 +91,6 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
 
             except:
                 pass
-
 
 def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=False,
                                null_inference=False, nulls=None):
@@ -202,16 +209,16 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
 
 
 # TODO: Can I do this without reopening the file?
-def get_dataframes(filename, header, delim, file_pointer, skiprows = 0, dataframe_size = 1000):
+def get_dataframes(filename, header, delim, skip_rows = 0, dataframe_size = 1000):
 
     header = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] #TODO: Un-hardcode this. Should get list of header_nms.
 
-    iter_csv = pd.read_csv(filename, sep=delim, chunksize=100, header=None, skiprows=file_pointer)
+    iter_csv = pd.read_csv(filename, sep=delim, chunksize=100, header=None, skiprows=skip_rows)
 
     return iter_csv
 
 
-# TODO: Currently assuming short freetext headers. This will take some time for long one (full re-reads)
+# Currently assuming short freetext headers.
 def get_header_info(data, delim):
     # Get a line count.
     line_count = 0
@@ -220,15 +227,17 @@ def get_header_info(data, delim):
     # Figure out the length of file via binary search (in"seek_preamble")
     if line_count >= 5: #set arbitrary min value or bin-search not useful.
         # A. Get the length of the preamble.
-        preamble_length = seek_preamble(data, delim, line_count)
+        preamble_length = get_last_preamble_line(data, delim, line_count)
+
         # B. Determine whether the next line is a freetext header
         data.seek(0)
         for i, line in enumerate(data):
             if i == preamble_length+1:  # +1 since that's one after the preamble.
                 print("The header row is: " + str(line))
-                header = struct_utils.is_header_row(struct_utils.fields(line, delim))
-                if header == True:
-                    header = struct_utils.fields(line,delim)
+
+                has_header = struct_utils.is_header_row(struct_utils.fields(line, delim))
+                if has_header:  # == True
+                    header = struct_utils.fields(line, delim)
                 else:
                     header = None
 
@@ -237,7 +246,7 @@ def get_header_info(data, delim):
         return (preamble_length, header, line_count)
 
 
-def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: check last delim finding w/ new one.
+def get_last_preamble_line(data, delim, start_point, prev_val=0, last_move=None): #TODO: check last delim finding w/ new one.
     """
     Takes an open file_handle and num_lines in file; returns last line of freetext header.
     :param data -- open file handle
@@ -278,10 +287,10 @@ def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: 
         # Check if all three values are identical.
         if split_vals.count(split_vals[0]) == len(split_vals):
             # Move UP the file.
-            return(seek_preamble(data, delim, midpoint, prev_val, "UP"))
+            return(get_last_preamble_line(data, delim, midpoint, prev_val, "UP"))
         else:
             # Move DOWN the file.
-            return(seek_preamble(data, delim, start_point, midpoint, "DOWN"))
+            return(get_last_preamble_line(data, delim, start_point, midpoint, "DOWN"))
 
 
 def ni_data(metadata):
@@ -319,5 +328,5 @@ def ni_data(metadata):
 #     seek_preamble(f, ',', 135, 0)
 
 filename= '/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header'
-#print(extract_columnar_metadata(filename))
-get_dataframes(filename, header=None, delim=',', file_length=210)
+extract_columnar_metadata(filename)
+#get_dataframes(filename, header=None, delim=',', file_length=210)
