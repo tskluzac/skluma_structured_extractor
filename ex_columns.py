@@ -65,7 +65,7 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
             line_count = header_info[2]
 
 
-            # TODO: TYLER -- start here. Ensure iterative data frames built correctly.
+            # TODO: TYLER -- start here.
             if header_col_labels != None:
                 dataframes = get_dataframes(data2, header=header_col_labels)
 
@@ -232,26 +232,16 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
 
 
 # TODO: Can I do this without reopening the file?
-def get_dataframes(filename, header, delim, file_length, dataframe_size = 1000):
+def get_dataframes(filename, header, delim, file_pointer, skiprows = 0, dataframe_size = 1000):
 
-    header = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+    header = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] #TODO: Un-hardcode this.
 
-    # Step 1. Divide data into chunks.
-    file_pointer = header
-    dataframes = []
+    iter_csv = pd.read_csv(filename, sep=delim, chunksize=100, header=None, skiprows=file_pointer)
+    for chunk in iter_csv:
+        print(chunk) #Commenting out as this works just fine.
 
-    while True:
+    return iter_csv
 
-        if file_pointer >= file_length:
-            break
-        data.seek(0)
-
-        i = 0
-        iter_csv = pandas.read_csv(filename, sep=delim, chunk_size=100, header=None, skiprows=83)
-        for chunk in iter_csv:
-            print(chunk)
-
-    return dataframes
 
 # TODO: Currently assuming short freetext headers. This will take some time for long one (full re-reads)
 def get_header_info(data, delim):
@@ -273,7 +263,7 @@ def get_header_info(data, delim):
 
         for i, line in enumerate(data):
             if i == preamble_length+1:  # +1 since that's one after the preamble.
-                print("The row is", line)
+                print("The header row is: " + str(line))
                 header = is_header_row(fields(line, delim))
                 if header == True:
                     header = fields(line,delim)
@@ -342,7 +332,6 @@ def seek_preamble(data, delim, start_point, prev_val=0, last_move=None): #TODO: 
         else:
             # Move DOWN the file.
             return(seek_preamble(data, delim, start_point, midpoint, "DOWN"))
-
 
 
 def add_row_to_aggregates(metadata, row, col_aliases, col_types, nulls=None):
@@ -517,5 +506,6 @@ def process_structured_file(full_file_path):
 # with open('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header', 'rU') as f:
 #     seek_preamble(f, ',', 135, 0)
 
-filename= '/home/ubuntu/skluma_structured_extractor/tests/test_files/freetext_header'
-print(extract_columnar_metadata(filename))
+filename= '/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header'
+#print(extract_columnar_metadata(filename))
+get_dataframes(filename, header=None, delim=',', file_length=210)
