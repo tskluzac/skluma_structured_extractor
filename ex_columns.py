@@ -10,7 +10,9 @@
 from multiprocessing import Pool
 import os
 import re
+import time
 
+import numpy as np
 import pandas as pd
 import struct_utils
 
@@ -44,6 +46,7 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
 
     try:
 
+        t0 = time.time()
         with open(data, 'rU') as data2:
 
             print("[DEBUG] Getting header data.")
@@ -62,16 +65,22 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
                 dataframes = get_dataframes(data2, header=None, delim=',', skip_rows=freetext_offset)
             print("[DEBUG] Successfully got dataframes!")
 
-            for item in dataframes:
-                print(item)
+
+
+            # for item in dataframes:
+            #     print(item)
 
             # Now process each data frame.
             print("[DEBUG] Extracting metadata using *m* processes...")
             pool = Pool(processes=2)
-            result = pool.map(_extract_columnar_metadata, dataframes) #TODO: Cannot yet feed _extract_columnar metadata a dataframe!
-            for m_item in result: #TODO: Not returning processed metadata.
-                print(m_item)
+            extract_dataframe_metadata(dataframes)
+            # result = pool.map(extract_dataframe_metadata, dataframes) #TODO: Cannot yet feed _extract_columnar metadata a dataframe!
+            # for m_item in result: #TODO: Not returning processed metadata.
+            #     print(m_item)
 
+        t1 = time.time()  #Currently at 0.020 seconds to get into Dataframes... not bad...
+
+        print(t1-t0)
         return _extract_columnar_metadata(
             data, ",",
             pass_fail=pass_fail, lda_preamble=lda_preamble, null_inference=null_inference, nulls=nulls
@@ -91,6 +100,31 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
 
             except:
                 pass
+
+def extract_dataframe_metadata(filename, df):
+
+    t0 = time.time()
+    df = pd.read_csv(filename, skiprows=82)
+
+    # Get only the numeric columns in data frame.
+    ndf = df._get_numeric_data()  # TODO: get 3 UNIQUE minima, 3 UNIQUE maxima, and average for each column.
+    # Get only the string columns in data frame.
+    sdf = df.select_dtypes(include=[object])  # TODO: Get five most-occurring values (max five).
+
+    # for column in df:
+    #     print(df[column])
+    print(sdf)
+    vals = df.values
+
+    t1 = time.time()
+
+    print(t1-t0)
+    # top2 = vals[np.arange(len(df))[:,None],np.argpartition(-vals,np.arange(2),axis=1)[:,:2]]
+
+    return(ndf, sdf)
+
+    #print(top2)
+
 
 def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=False,
                                null_inference=False, nulls=None):
@@ -328,5 +362,6 @@ def ni_data(metadata):
 #     seek_preamble(f, ',', 135, 0)
 
 filename= '/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header'
-extract_columnar_metadata(filename)
+extract_dataframe_metadata(filename, 'duhp')
+#extract_columnar_metadata(filename)
 #get_dataframes(filename, header=None, delim=',', file_length=210)
