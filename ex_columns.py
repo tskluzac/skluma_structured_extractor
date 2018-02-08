@@ -14,6 +14,7 @@ import re
 
 from decimal import Decimal
 from heapq import nsmallest, nlargest
+import pandas as pd
 import pickle as pkl
 
 
@@ -47,24 +48,31 @@ def extract_columnar_metadata(data, pass_fail=False, lda_preamble=False, null_in
             :raises: (ExtractionFailed) if the file cannot be read as a columnar file"""
 
 
-    # Step 1: find (a) location of the freetext header, (b) normal header, (c) delimiter.
 
+    # pool = Pool(processes = 2)
+    # result = pool.map(doubler, numbers)
 
-    header_info = get_header_info(data, delim=',')  # TODO: return header_info.
-
-
-    # Step 2: create thread_pool of 10k line chunks.
-
-    pool = Pool(processes = 2)
-    #result = pool.map(doubler, numbers)
-
-    #for m_item in result:
+    # for m_item in result:
     #   print(m_item)
 
-    # Step 3: run metadata extractor on each chunk
-
-
     try:
+
+        header_info = get_header_info(data, delim=',')  # TODO: return header_info.
+        freetext_offset = header_info[0]
+        header_col_labels = header_info[1]
+
+        if header_col_labels != None:
+            dataframes = get_dataframes(data, header=freetext_offset+1)
+
+        else:  # elif header_col_labels == None.
+            dataframes = get_dataframes(data, header=None)
+
+
+
+        # Create
+
+
+
         return _extract_columnar_metadata(
             data, ",",
             pass_fail=pass_fail, lda_preamble=lda_preamble, null_inference=null_inference, nulls=nulls
@@ -246,6 +254,33 @@ def _extract_columnar_metadata(data, delimiter, pass_fail=False, lda_preamble=Fa
     return metadata
 
 
+
+def get_dataframes(data, header, delim, file_length, dataframe_size = 20):
+
+    # Step 1. Divide data into chunks.
+    file_pointer = header
+    dataframes = []
+
+    while True:
+
+        if file_pointer >= file_length:
+            break
+        data.seek(0)
+
+        i = 0
+        df = pd.DataFrame()
+
+        for i, line in enumerate(data):
+            if i >= file_pointer:
+                df.append(line.split(delim), ignore_index=True)  # Append line to the list.
+
+            if i > file_pointer + dataframe_size:
+                file_pointer = i
+        dataframes.append(df)
+
+    return dataframes
+
+
 def get_header_info(data, delim):
     # Step 1. Ascertain number of lines in file.
     line_count = 0
@@ -258,7 +293,6 @@ def get_header_info(data, delim):
         preamble_length = seek_preamble(data, delim, line_count)
         # B. Determine whether the next line is a freetext header
         #Convert to fields, then check if is_header_row().
-
         return preamble_length
 
 
@@ -494,6 +528,9 @@ def process_structured_file(full_file_path):
     return (metadata, sub_extr_data, sub_extr)
 
 
-process_structured_file('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header')
+#process_structured_file('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header')
 # with open('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header', 'rU') as f:
 #     seek_preamble(f, ',', 135, 0)
+
+with open('/home/ubuntu/skluma_structured_extractor/tests/test_files/freetext_header', 'rU') as f:
+    print(get_dataframes(f, 83, ',', 130))
