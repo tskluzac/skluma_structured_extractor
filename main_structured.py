@@ -92,7 +92,7 @@ def extract_dataframe_metadata(filename, df):
     sdf = df.select_dtypes(include=[object])  # TODO: Get five most-occurring values (max five).
 
     for col in sdf:
-        print ndf[col].value_counts()  # Just get 3 here.
+        print(ndf[col].value_counts())  # Just get 3 here.
 
     #print(sdf)
     vals = df.values
