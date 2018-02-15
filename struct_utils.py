@@ -92,7 +92,7 @@ def add_row_to_aggregates(metadata, row, col_aliases, col_types, nulls=None):
                 if null != 0 and abs(value - null) < NULL_EPSILON:
                     continue
 
-            # add row data to existing aggregates
+            # add row data to existing aggregates #TODO: This in pandas.
             mins = list(set(metadata["columns"][col_alias]["min"] + [value]))
             maxes = list(set(metadata["columns"][col_alias]["max"] + [value]))
             metadata["columns"][col_alias]["min"] = nsmallest(3, mins)
