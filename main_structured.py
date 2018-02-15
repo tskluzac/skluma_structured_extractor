@@ -102,7 +102,7 @@ def extract_dataframe_metadata(filename, df):
     print(t1-t0)
     # top2 = vals[np.arange(len(df))[:,None],np.argpartition(-vals,np.arange(2),axis=1)[:,:2]]
 
-    return(ndf, sdf)
+    return (ndf, sdf)
 
 
 def get_delimiter(filename, numlines):
