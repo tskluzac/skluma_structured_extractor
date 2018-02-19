@@ -157,8 +157,8 @@ def get_dataframes(filename, header, delim, skip_rows = 0, dataframe_size = 1000
 
     # TODO: tie to column labels -- more useful for search.
 
-    skip_rows=82
-    iter_csv = pd.read_csv(filename, sep=delim, chunksize=10, header=None, skiprows=skip_rows, iterator=True)
+    skip_rows = 82
+    iter_csv = pd.read_csv(filename, sep=delim, chunksize=1000, header=None, skiprows=skip_rows, iterator=True)
 
     return iter_csv
 
@@ -176,9 +176,15 @@ def get_header_info(data, delim):
         # A. Get the length of the preamble.
         preamble_length = get_last_preamble_line(data, delim, line_count)
 
+
+
         # B. Determine whether the next line is a freetext header
         data.seek(0)
         for i, line in enumerate(data):
+
+            if preamble_length == None:
+                header = None
+                break
             if i == preamble_length+1:  # +1 since that's one after the preamble.
                 print("The header row is: " + str(line))
 
@@ -239,5 +245,5 @@ def get_last_preamble_line(data, delim, start_point, prev_val=0, last_move=None)
             # Move DOWN the file.
             return(get_last_preamble_line(data, delim, start_point, midpoint, "DOWN"))
 
-extract_columnar_metadata('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header')
+extract_columnar_metadata('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/tab_delim')
 #get_delimiter('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header', 212)
