@@ -1,6 +1,7 @@
 
 import time
 from multiprocessing import Pool
+import numpy as np
 import pandas as pd
 import struct_utils
 import csv
@@ -20,7 +21,7 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
             :returns: (dict) ascertained metadata
             :raises: (ExtractionFailed) if the file cannot be read as a columnar file"""
 
-    # pool = Pool(processes = 2)
+    # pool = Pool(processes = 2)https://github.com/Dingyan/124-critters.git
     # result = pool.map(doubler, numbers)
 
     # for m_item in result:
@@ -69,6 +70,9 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
 
         # Now process each data frame.
     print("[DEBUG] Extracting metadata using *m* processes...")
+    for item in dataframes:
+        extract_dataframe_metadata(filename, item)
+    #metadata = extract_dataframe_metadata(filename)
         #pool = Pool(processes=2)
        # extract_dataframe_metadata(filename, dataframes)
         # result = pool.map(extract_dataframe_metadata, dataframes) #TODO: Cannot yet feed _extract_columnar metadata a dataframe!
@@ -84,25 +88,46 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
 def extract_dataframe_metadata(filename, df):
 
     t0 = time.time()
-    df = pd.read_csv(filename, skiprows=82)
+    # df = pd.read_csv(filename, skiprows=82)
 
     # Get only the numeric columns in data frame.
     ndf = df._get_numeric_data()  # TODO: get 3 UNIQUE minima, 3 UNIQUE maxima, and average for each column.
     # Get only the string columns in data frame.
     sdf = df.select_dtypes(include=[object])  # TODO: Get five most-occurring values (max five).
 
-    for col in sdf:
-        print(ndf[col].value_counts())  # Just get 3 here.
+    # for col in sdf:
+    #     print(ndf[col].value_counts())  # Just get 3 here.
 
-    #print(sdf)
+    # print(sdf)
     vals = df.values
 
     t1 = time.time()
 
     print(t1-t0)
-    # top2 = vals[np.arange(len(df))[:,None],np.argpartition(-vals,np.arange(2),axis=1)[:,:2]]
 
-    return (ndf, sdf)
+    try:
+        for col in ndf:
+            largest = df.nlargest(3, columns=col, keep='first')  # Output dataframe ordered by col.
+            smallest = df.nsmallest(3, columns=col, keep='first')
+            the_mean = ndf[col].mean()
+
+            col_maxs = largest[col]
+            col_mins = smallest[col]
+
+            maxn = []
+            minn = []
+            for maxnum in col_maxs:
+                maxn.append(maxnum)
+
+            for minnum in col_mins:
+                minn.append(minnum)
+
+            # TODO: Create tuple entry (header_name (or index), [max1, max2, max3], [min1, min2, min3], avg)
+            print(col, minn, maxn, the_mean) #TODO: Header_NAME and avg.
+    except:
+        top2 = "None"
+    # return (ndf, sdf)
+    return ndf
 
 
 def get_delimiter(filename, numlines):
@@ -130,7 +155,8 @@ def get_dataframes(filename, header, delim, skip_rows = 0, dataframe_size = 1000
 
     header = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] #TODO: Un-hardcode this. Should get list of header_nms.
 
-    iter_csv = pd.read_csv(filename, sep=delim, chunksize=100, header=None, skiprows=skip_rows)
+    skip_rows=82
+    iter_csv = pd.read_csv(filename, sep=delim, chunksize=10, header=None, skiprows=skip_rows, iterator=True)
 
     return iter_csv
 
