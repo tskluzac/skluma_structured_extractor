@@ -8,8 +8,10 @@ import csv
 
 MIN_ROWS = 5
 
+
 class NonUniformDelimiter(Exception):
     """When the file cannot be pushed into a delimiter. """
+
 
 def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, null_inference=False, nulls=None):
     """Get metadata from column-formatted file.
@@ -26,8 +28,6 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
 
     # for m_item in result:
     #   print(m_item)
-
-    #try:
 
     t0 = time.time()
     with open(filename, 'rU') as data2:
@@ -61,6 +61,8 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
 
     data2.close()
 
+
+
     t1 = time.time()
     print(t1-t0)
 
@@ -75,7 +77,7 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
     #metadata = extract_dataframe_metadata(filename)
         #pool = Pool(processes=2)
        # extract_dataframe_metadata(filename, dataframes)
-        # result = pool.map(extract_dataframe_metadata, dataframes) #TODO: Cannot yet feed _extract_columnar metadata a dataframe!
+        # result = pool.map(extract_dataframe_metadata, dataframes)
         # for m_item in result: #TODO: Not returning processed metadata.
         #     print(m_item)
 
@@ -91,19 +93,18 @@ def extract_dataframe_metadata(filename, df):
     # df = pd.read_csv(filename, skiprows=82)
 
     # Get only the numeric columns in data frame.
-    ndf = df._get_numeric_data()  # TODO: get 3 UNIQUE minima, 3 UNIQUE maxima, and average for each column.
+    ndf = df._get_numeric_data()
     # Get only the string columns in data frame.
-    sdf = df.select_dtypes(include=[object])  # TODO: Get five most-occurring values (max five).
+    sdf = df.select_dtypes(include=[object])  # TODO: Get k most-occurring values (max five).
 
     # for col in sdf:
     #     print(ndf[col].value_counts())  # Just get 3 here.
-
-    # print(sdf)
-    vals = df.values
+    #vals = df.values
 
     t1 = time.time()
 
     print(t1-t0)
+    tuple_list = []
 
     try:
         for col in ndf:
@@ -122,12 +123,13 @@ def extract_dataframe_metadata(filename, df):
             for minnum in col_mins:
                 minn.append(minnum)
 
-            # TODO: Create tuple entry (header_name (or index), [max1, max2, max3], [min1, min2, min3], avg)
-            print(col, minn, maxn, the_mean) #TODO: Header_NAME and avg.
+            # (header_name (or index), [max1, max2, max3], [min1, min2, min3], avg)
+            the_tuple = (col, minn, maxn, the_mean) #TODO: Header_NAME and avg.
+            tuple_list.append((len(ndf), the_tuple))
     except:
-        top2 = "None"
-    # return (ndf, sdf)
-    return ndf
+        pass
+
+    return tuple_list
 
 
 def get_delimiter(filename, numlines):
@@ -153,7 +155,7 @@ def get_delimiter(filename, numlines):
 
 def get_dataframes(filename, header, delim, skip_rows = 0, dataframe_size = 1000):
 
-    header = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] #TODO: Un-hardcode this. Should get list of header_nms.
+    # TODO: tie to column labels -- more useful for search.
 
     skip_rows=82
     iter_csv = pd.read_csv(filename, sep=delim, chunksize=10, header=None, skiprows=skip_rows, iterator=True)
