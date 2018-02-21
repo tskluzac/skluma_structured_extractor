@@ -8,6 +8,7 @@ import csv
 
 MIN_ROWS = 5
 
+#TODO: Use dataframe.sample.
 
 class NonUniformDelimiter(Exception):
     """When the file cannot be pushed into a delimiter. """
@@ -44,19 +45,19 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
         print("Delimiter is " + delimiter)
 
         print("[DEBUG] Getting header data.")
-        header_info = get_header_info(data2, delim=delimiter)  #TODO: use max-fields of ',', ' ', or '\t'???
+        header_info = get_header_info(data2, delim='\t')  #TODO: use max-fields of ',', ' ', or '\t'???
         print(header_info)
         freetext_offset = header_info[0]
         header_col_labels = header_info[1]
-        #line_count = header_info[2]
+
         print("[DEBUG] Successfully got header data!")
 
         # TODO: TYLER -- start here.
         print("[DEBUG] Getting dataframes")
         if header_col_labels != None:
-            dataframes = get_dataframes(filename, header=header_col_labels, delim=',', skip_rows=freetext_offset)
+            dataframes = get_dataframes(filename, header=header_col_labels, delim='\t', skip_rows=freetext_offset)
         else:  # elif header_col_labels == None.
-            dataframes = get_dataframes(filename, header=None, delim=',', skip_rows=freetext_offset)
+            dataframes = get_dataframes(filename, header=None, delim='\t', skip_rows=freetext_offset)
         print("[DEBUG] Successfully got dataframes!")
 
     data2.close()
@@ -64,7 +65,7 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
 
 
     t1 = time.time()
-    print(t1-t0)
+    #print(t1-t0)
 
 
         # for item in dataframes:
@@ -72,8 +73,17 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
 
         # Now process each data frame.
     print("[DEBUG] Extracting metadata using *m* processes...")
+    i = 0
     for item in dataframes:
-        extract_dataframe_metadata(filename, item)
+        try:
+            i += 1
+            #print(i)
+            # extract_dataframe_metadata(filename, item)
+            extract_dataframe_metadata(filename, item)
+
+        except:
+            i+=1
+            print("Error: " + str(i))
     #metadata = extract_dataframe_metadata(filename)
         #pool = Pool(processes=2)
        # extract_dataframe_metadata(filename, dataframes)
@@ -103,7 +113,7 @@ def extract_dataframe_metadata(filename, df):
 
     t1 = time.time()
 
-    print(t1-t0)
+    #print(t1-t0)
     tuple_list = []
 
     try:
@@ -112,6 +122,7 @@ def extract_dataframe_metadata(filename, df):
             smallest = df.nsmallest(3, columns=col, keep='first')
             the_mean = ndf[col].mean()
 
+            # Use GROUP_BY and then MEAN.
             col_maxs = largest[col]
             col_mins = smallest[col]
 
@@ -135,15 +146,18 @@ def extract_dataframe_metadata(filename, df):
 def get_delimiter(filename, numlines):
 
     # Step 1: Load last min_lines into dataframe.  Just to ensure it can be done.
-    mini_df = pd.read_csv(filename, skiprows = numlines-MIN_ROWS)
+    mini_df = pd.read_csv(filename, skiprows = numlines-MIN_ROWS, error_bad_lines=False)
 
     # Step 2: Get the delimiter of the last n lines.
     s = csv.Sniffer()
-    with open(filename, 'rU') as fil:
+    with open(filename, 'r') as fil:
         i = 1
         delims = []
         for line in fil:
-            if i > numlines - MIN_ROWS:
+            #print(line)
+            #line = line.encode('utf-8').strip()
+            if i > numlines - MIN_ROWS and ('=' not in line):
+                #print(line)
                 delims.append(s.sniff(line).delimiter)
             i += 1
 
@@ -158,9 +172,13 @@ def get_dataframes(filename, header, delim, skip_rows = 0, dataframe_size = 1000
     # TODO: tie to column labels -- more useful for search.
 
     skip_rows = 82
-    iter_csv = pd.read_csv(filename, sep=delim, chunksize=1000, header=None, skiprows=skip_rows, iterator=True)
+    iter_csv = pd.read_csv(filename, sep=delim, chunksize=100000, header=None, skiprows=skip_rows, error_bad_lines=False, iterator=True)
 
     return iter_csv
+
+def count_fields(dataframe):
+    #print(dataframe)
+    print(dataframe.shape[1])
 
 
 # Currently assuming short freetext headers.
@@ -197,6 +215,9 @@ def get_header_info(data, delim):
             elif i > preamble_length:
                 break
         return (preamble_length, header)
+
+
+
 
 
 def get_last_preamble_line(data, delim, start_point, prev_val=0, last_move=None): #TODO: check last delim finding w/ new one.
@@ -245,5 +266,28 @@ def get_last_preamble_line(data, delim, start_point, prev_val=0, last_move=None)
             # Move DOWN the file.
             return(get_last_preamble_line(data, delim, start_point, midpoint, "DOWN"))
 
-extract_columnar_metadata('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/tab_delim')
+while True:
+    with open('check.txt','r') as h:
+        for line in h:
+            #print(line)
+            time.sleep(.01)
+            if '1' in line:
+                #print(line)
+                #break
+
+                for item in ['5mb.txt', '50mb.txt', '500mb.txt', '5gb.txt']:
+                    t0 = time.time()
+                    print(t0)
+                    #get_delimiter('/home/skluzacek/Downloads/SOCATv2.tsv', 10000000)
+                    extract_columnar_metadata('/home/skluzacek/Downloads/' + item)
+                    #time.sleep(3.123454)
+                    t1 = time.time()
+                    print(t1)
+
+                    print(t1-t0)
+                break
+            # else:
+            #     h.close()
+
+#extract_columnar_metadata('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/tab_delim')
 #get_delimiter('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header', 212)
