@@ -1,14 +1,23 @@
 
 import time
-from multiprocessing import Pool
-import numpy as np
 import pandas as pd
 import struct_utils
 import csv
+import math
 
 MIN_ROWS = 5
 
-#TODO: Use dataframe.sample.
+"""
+ TODO LIST: 
+ 1. Be able to isolate preamble and header (if exists) in a file. Hold preamble as free text string. 
+ 2. Should be able to make up header values for columns if they don't already exist. 
+ 3. Get meaningful numeric metadata
+ 4. Get meaningful nonnumeric metadata (most commonly used field values). 
+ 5. Data sampling. 
+ 6. Handle 2-line headers. ('/home/skluzacek/pub8/oceans/VOS_Natalie_Schulte_Lines/NS2010_09.csv')
+ 
+
+"""
 
 class NonUniformDelimiter(Exception):
     """When the file cannot be pushed into a delimiter. """
@@ -24,121 +33,98 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
             :returns: (dict) ascertained metadata
             :raises: (ExtractionFailed) if the file cannot be read as a columnar file"""
 
-    # pool = Pool(processes = 2)https://github.com/Dingyan/124-critters.git
-    # result = pool.map(doubler, numbers)
-
-    # for m_item in result:
-    #   print(m_item)
-
-    t0 = time.time()
     with open(filename, 'rU') as data2:
-
+        # Step 1. Quick scan for number of lines in file.
         print("[DEBUG] Getting number of lines. ")
         line_count = 1
-        for line in data2:
+        for _ in data2:
             line_count += 1
 
         print(str(line_count) + " lines.")
 
+        # Step 2. Determine the delimiter of the file.
         print("[DEBUG] Getting delimiter data.")
         delimiter = get_delimiter(filename, line_count)
         print("Delimiter is " + delimiter)
 
+        # Step 3. Isolate the header data.
         print("[DEBUG] Getting header data.")
-        header_info = get_header_info(data2, delim='\t')  #TODO: use max-fields of ',', ' ', or '\t'???
-        print(header_info)
+        header_info = get_header_info(data2, delim=",")  #TODO: use max-fields of ',', ' ', or '\t'???
         freetext_offset = header_info[0]
         header_col_labels = header_info[1]
 
+        print(header_info)
+
         print("[DEBUG] Successfully got header data!")
 
-        # TODO: TYLER -- start here.
+        # Step 4. Extract content-based metadata.
         print("[DEBUG] Getting dataframes")
         if header_col_labels != None:
-            dataframes = get_dataframes(filename, header=header_col_labels, delim='\t', skip_rows=freetext_offset)
-        else:  # elif header_col_labels == None.
-            dataframes = get_dataframes(filename, header=None, delim='\t', skip_rows=freetext_offset)
+            dataframes = get_dataframes(filename, header=header_col_labels, delim=delimiter, skip_rows=freetext_offset)
+        else:
+            dataframes = get_dataframes(filename, header=None, delim=delimiter, skip_rows=freetext_offset)
         print("[DEBUG] Successfully got dataframes!")
-
     data2.close()
 
-
-
-    t1 = time.time()
-    #print(t1-t0)
-
-
-        # for item in dataframes:
-        #     print(item)
-
-        # Now process each data frame.
+    # Now process each data frame.
     print("[DEBUG] Extracting metadata using *m* processes...")
-    i = 0
-    for item in dataframes:
-        try:
-            i += 1
-            #print(i)
-            # extract_dataframe_metadata(filename, item)
-            extract_dataframe_metadata(filename, item)
 
-        except:
-            i+=1
-            print("Error: " + str(i))
-    #metadata = extract_dataframe_metadata(filename)
-        #pool = Pool(processes=2)
-       # extract_dataframe_metadata(filename, dataframes)
-        # result = pool.map(extract_dataframe_metadata, dataframes)
-        # for m_item in result: #TODO: Not returning processed metadata.
-        #     print(m_item)
+    # Iterate over each dataframe to extract values.
+    df_metadata = []
+    for df in dataframes:
+        print(df)
 
-    #t1 = time.time()  #Currently at 0.020 seconds to get into Dataframes... not bad...
+        # df = df.str.split(",")
 
-    # except:
-    #     pass
+        metadata = extract_dataframe_metadata(df, header_col_labels)
+        df_metadata.append(metadata)
 
 
-def extract_dataframe_metadata(filename, df):
+def extract_dataframe_metadata(df, header):
+
+    print("HEADERS:" + str(header))
 
     t0 = time.time()
-    # df = pd.read_csv(filename, skiprows=82)
 
     # Get only the numeric columns in data frame.
     ndf = df._get_numeric_data()
+
+    print("NDF: " + str(ndf))
+
     # Get only the string columns in data frame.
     sdf = df.select_dtypes(include=[object])  # TODO: Get k most-occurring values (max five).
 
-    # for col in sdf:
-    #     print(ndf[col].value_counts())  # Just get 3 here.
-    #vals = df.values
+    print("SDF: " + str(ndf))
 
-    t1 = time.time()
 
-    #print(t1-t0)
     tuple_list = []
 
-    try:
-        for col in ndf:
-            largest = df.nlargest(3, columns=col, keep='first')  # Output dataframe ordered by col.
-            smallest = df.nsmallest(3, columns=col, keep='first')
-            the_mean = ndf[col].mean()
+    for col in ndf:
 
-            # Use GROUP_BY and then MEAN.
-            col_maxs = largest[col]
-            col_mins = smallest[col]
+        largest = df.nlargest(3, columns=col, keep='first')  # Output dataframe ordered by col.
+        smallest = df.nsmallest(3, columns=col, keep='first')
+        the_mean = ndf[col].mean()
 
-            maxn = []
-            minn = []
-            for maxnum in col_maxs:
-                maxn.append(maxnum)
+        print(the_mean)
 
-            for minnum in col_mins:
-                minn.append(minnum)
 
-            # (header_name (or index), [max1, max2, max3], [min1, min2, min3], avg)
-            the_tuple = (col, minn, maxn, the_mean) #TODO: Header_NAME and avg.
-            tuple_list.append((len(ndf), the_tuple))
-    except:
-        pass
+        # Use GROUP_BY and then MEAN.
+        col_maxs = largest[col]
+        col_mins = smallest[col]
+
+        maxn = []
+        minn = []
+        for maxnum in col_maxs:
+            maxn.append(maxnum)
+
+        for minnum in col_mins:
+            minn.append(minnum)
+
+        # (header_name (or index), [max1, max2, max3], [min1, min2, min3], avg)
+        the_tuple = (col, minn, maxn, the_mean) #TODO: Header_NAME and avg.
+        tuple_list.append((len(ndf), the_tuple))
+
+        # print(the_tuple)
 
     return tuple_list
 
@@ -167,43 +153,45 @@ def get_delimiter(filename, numlines):
         else:
             raise NonUniformDelimiter("Error in get_delimiter")
 
-def get_dataframes(filename, header, delim, skip_rows = 0, dataframe_size = 1000):
 
-    # TODO: tie to column labels -- more useful for search.
+def get_dataframes(filename, header, delim, skip_rows = 0, dataframe_size = 1000):
 
     skip_rows = 82
     iter_csv = pd.read_csv(filename, sep=delim, chunksize=100000, header=None, skiprows=skip_rows, error_bad_lines=False, iterator=True)
 
     return iter_csv
 
+
 def count_fields(dataframe):
-    #print(dataframe)
     print(dataframe.shape[1])
 
 
 # Currently assuming short freetext headers.
 def get_header_info(data, delim):
+
     data.seek(0)
-    # Get a line count.
+    # TODO: Get the line count from the binary search.
+    # Get the line count.
     line_count = 0
-    for line in data:
+    for _ in data:
         line_count += 1
 
     # Figure out the length of file via binary search (in"seek_preamble")
-    if line_count >= 5: #set arbitrary min value or bin-search not useful.
+    if line_count >= 5:  # set arbitrary min value or bin-search not useful.
         # A. Get the length of the preamble.
-        preamble_length = get_last_preamble_line(data, delim, line_count)
+        preamble_length = _get_preamble(data, delim)
 
-
-
+        print("P-length: " + str(preamble_length))
         # B. Determine whether the next line is a freetext header
         data.seek(0)
+
+        header = None
         for i, line in enumerate(data):
 
             if preamble_length == None:
                 header = None
                 break
-            if i == preamble_length+1:  # +1 since that's one after the preamble.
+            if i == preamble_length:  # +1 since that's one after the preamble.
                 print("The header row is: " + str(line))
 
                 has_header = struct_utils.is_header_row(struct_utils.fields(line, delim))
@@ -214,80 +202,83 @@ def get_header_info(data, delim):
 
             elif i > preamble_length:
                 break
+
         return (preamble_length, header)
 
 
+def _get_preamble(data, delim):
+    data.seek(0)
+    delim = ','
+    max_nonzero_row = None
+    max_nonzero_line_count = None
+    last_preamble_line_num = None
+
+    # *** Get number of delimited columns in last nonempty row (and row number) *** #
+    delim_counts = {}
+    for i, line in enumerate(data):
+        cur_line_field_count = len(line.split(delim))
+
+        if cur_line_field_count != 0:
+            delim_counts[i] = cur_line_field_count
+            max_nonzero_row = i
+            max_nonzero_line_count = cur_line_field_count
+
+    print(delim_counts)
+
+    # [Weed out complicated cases] Now if the last three values are all the same...
+    if delim_counts[max_nonzero_row] == delim_counts[max_nonzero_row - 1] == delim_counts[max_nonzero_row - 2]:
+        # Now binary-search from the end to find the last row with that number of columns.
+        starting_row = math.floor(max_nonzero_row - 2) / 2  # Start in middle of file for sanity.
+        last_preamble_line_num = _last_preamble_line_bin_search(delim_counts, max_nonzero_line_count, starting_row,
+                                                                upper_bd=0, lower_bd=max_nonzero_row - 2)
+
+    return last_preamble_line_num
 
 
+def _last_preamble_line_bin_search(field_cnt_dict, target_field_num, cur_row, upper_bd=None, lower_bd=None):
 
-def get_last_preamble_line(data, delim, start_point, prev_val=0, last_move=None): #TODO: check last delim finding w/ new one.
-    """
-    Takes an open file_handle and num_lines in file; returns last line of freetext header.
-    :param data -- open file handle
-    :param delim -- delimiter to try
-    :param start_point -- length of file #TODO: Rename
-    :param prev_val -- the 'top' of where we look #TODO: Rename.
-    :returns None if no ft header, last line of header if ft header.
-    """
-    if start_point - prev_val <= 1:
-        data.seek(0)
-        line_counts = []
-        for i, line in enumerate(data):
-            if i in range(prev_val-5, prev_val+5):
-                line_counts.append((i, len(line.split(delim))))
-            elif i > prev_val + 5:
-                break
-        ### Now walk through the lines to find the line with less freetext data than others.
-        line_counts.reverse()
-        last_count = line_counts[0][1]
-        for item in line_counts:
-            if item[1] == last_count:
-                last_count = item[1]
-                pass
-            else:
-                print("Should obviously change the answer")
-                return item[0]
-    else:
-        midpoint = int((start_point+prev_val)/2)
-        split_vals = []
+    # Check current row and next two to see if they are all the target value.
+    cur_row = math.floor(cur_row)
 
-        # Get midpoint-1, midpoint, midpoint+1 lines.
-        data.seek(0)
-        for i, line in enumerate(data):
-            if i == midpoint-1 or i == midpoint or i == midpoint + 1:
-                split_vals.append(len(line.split(delim)))  # Append the number of split items.
-            elif i > midpoint + 1:
-                break
-        # Check if all three values are identical.
-        if split_vals.count(split_vals[0]) == len(split_vals):
-            # Move UP the file.
-            return(get_last_preamble_line(data, delim, midpoint, prev_val, "UP"))
+    # If so, then we want to move up in the file.
+    if field_cnt_dict[cur_row] == field_cnt_dict[cur_row+1] == field_cnt_dict[cur_row+2] == target_field_num:
+
+        new_cur_row = cur_row - math.floor((cur_row - upper_bd)/2)
+
+        # If we're in the first row, we should return here.
+        if cur_row == 1 and field_cnt_dict[cur_row-1] == field_cnt_dict[cur_row] == target_field_num:
+            return 0
+
+        elif cur_row == 1 and field_cnt_dict[cur_row-1] != target_field_num:
+            return 1
+
         else:
-            # Move DOWN the file.
-            return(get_last_preamble_line(data, delim, start_point, midpoint, "DOWN"))
+            recurse = _last_preamble_line_bin_search(field_cnt_dict, target_field_num, new_cur_row,
+                                                     upper_bd=upper_bd, lower_bd=cur_row)
+            return recurse
 
-while True:
-    with open('check.txt','r') as h:
-        for line in h:
-            #print(line)
-            time.sleep(.01)
-            if '1' in line:
-                #print(line)
-                #break
+    elif field_cnt_dict[cur_row] == field_cnt_dict[cur_row+1] == target_field_num:
+        return cur_row + 1
 
-                for item in ['5mb.txt', '50mb.txt', '500mb.txt', '5gb.txt']:
-                    t0 = time.time()
-                    print(t0)
-                    #get_delimiter('/home/skluzacek/Downloads/SOCATv2.tsv', 10000000)
-                    extract_columnar_metadata('/home/skluzacek/Downloads/' + item)
-                    #time.sleep(3.123454)
-                    t1 = time.time()
-                    print(t1)
+    # If not, then we want to move down in the file.
+    else:
+        new_cur_row = cur_row + math.floor((lower_bd - cur_row) / 2)
 
-                    print(t1-t0)
-                break
-            # else:
-            #     h.close()
+        if cur_row == new_cur_row:
+            return cur_row + 1
 
-#extract_columnar_metadata('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/tab_delim')
-#get_delimiter('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header', 212)
+        recurse = _last_preamble_line_bin_search(field_cnt_dict, target_field_num, new_cur_row,
+                                                 upper_bd=cur_row, lower_bd=lower_bd)
+        return recurse
+
+
+# with open('/home/skluzacek/pub8/oceans/VOS_Natalie_Schulte_Lines/NS2010_09.csv', 'r') as f:
+    # with open('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/comma_delim', 'r') as f:
+    # print(_get_preamble(f, ','))
+
+# with open('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/freetext_header', 'r') as f:
+
+    # get_last_preamble_line(f, delim=',', start_point=100, upper_bd=5, lower_bd=210)
+
+
+extract_columnar_metadata('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/no_headers')
