@@ -91,6 +91,9 @@ def extract_dataframe_metadata(df, header):
     # Get only the string columns in data frame.
     sdf = df.select_dtypes(include=[object])
 
+
+    print(sdf)
+
     ndf_tuples = []
 
     for col in ndf:
@@ -112,21 +115,37 @@ def extract_dataframe_metadata(df, header):
             minn.append(minnum)
 
         # (header_name (or index), [max1, max2, max3], [min1, min2, min3], avg)
-        # TODO: Header
-        ndf_tuple = {"col_id": col, "metadata": {"num_rows": len(ndf), "min_n": minn, "max_n": maxn, "mean": the_mean}}
-        ndf_tuples.append((len(ndf), ndf_tuple))
+        if header is not None:
+            ndf_tuple = {"col_id": header[col], "metadata": {"num_rows": len(ndf), "min_n": minn, "max_n": maxn, "mean": the_mean}}
+        else:
+            ndf_tuple = {"col_id": "__{}__".format(col), "metadata": {"num_rows": len(ndf), "min_n": minn, "max_n": maxn, "mean": the_mean}}
+
+        ndf_tuples.append(ndf_tuple)
+
+    # TODO: Repeated column names? They would just overwrite.
+    nonnumeric_metadata = []
+    top_modes = {}
 
     # Now get the nonnumeric data tags.
-    top_modes = {}
     for col in sdf:
         # Mode tags represent the three most prevalent values from each paged dataframe.
         nonnumeric_top_3_df = sdf[col].value_counts().head(3)
 
-        # TODO: Separate these values by column in the outputted dict.
         for row in nonnumeric_top_3_df.iteritems():
+
             top_modes[row[0]] = row[1]
 
-    df_metadata = {"numeric": ndf_tuples, "nonnumeric": top_modes}
+        if header is not None:
+            top_modes[header[col]] = {"top3_modes": top_modes}
+
+        else:
+            top_modes[col] = {"top3_mode": top_modes}
+    # TODO: START HERE -- Separate these values by column in the outputted dict.
+
+    nonnumeric_metadata.append(top_modes)
+
+
+    df_metadata = {"numeric": ndf_tuples, "nonnumeric": nonnumeric_metadata}
 
     return df_metadata
 
@@ -168,7 +187,7 @@ def count_fields(dataframe):
 def get_header_info(data, delim):
 
     data.seek(0)
-    # TODO: Get the line count from the binary search.
+    # TODO: Get the line count from the binary search. This is an extra scan for no reason.
     # Get the line count.
     line_count = 0
     for _ in data:
@@ -281,4 +300,4 @@ def _last_preamble_line_bin_search(field_cnt_dict, target_field_num, cur_row, up
 
 # extract_columnar_metadata('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/no_headers')
 # extract_columnar_metadata('./tests/test_files/tab_delim')
-extract_columnar_metadata('./tests/test_files/freetext_header')
+extract_columnar_metadata('./tests/test_files/no_headers')
