@@ -122,7 +122,7 @@ def extract_dataframe_metadata(df, header):
         # Mode tags represent the three most prevalent values from each paged dataframe.
         nonnumeric_top_3_df = sdf[col].value_counts().head(3)
 
-        # TODO: Separate these values by column in the outputted dict. 
+        # TODO: Separate these values by column in the outputted dict.
         for row in nonnumeric_top_3_df.iteritems():
             top_modes[row[0]] = row[1]
 
