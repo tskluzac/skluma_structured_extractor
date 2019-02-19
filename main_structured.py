@@ -1,5 +1,4 @@
 
-import time
 import pandas as pd
 import struct_utils
 import csv
@@ -19,11 +18,12 @@ MIN_ROWS = 5
 
 """
 
+
 class NonUniformDelimiter(Exception):
     """When the file cannot be pushed into a delimiter. """
 
 
-def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, null_inference=False, nulls=None):
+def extract_columnar_metadata(filename):
     """Get metadata from column-formatted file.
             :param data: (str) a path to an unopened file.
             :param pass_fail: (bool) whether to exit after ascertaining file class
@@ -60,9 +60,12 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
         # Step 4. Extract content-based metadata.
         print("[DEBUG] Getting dataframes")
         if header_col_labels != None:
-            dataframes = get_dataframes(filename, header=header_col_labels, delim=delimiter, skip_rows=freetext_offset)
+            print("WE HAVE HEADERS!")
+            print(freetext_offset)
+            dataframes = get_dataframes(filename, header=None, delim=delimiter, skip_rows=freetext_offset+1)
         else:
-            dataframes = get_dataframes(filename, header=None, delim=delimiter, skip_rows=freetext_offset)
+            print("WE HAVE NO HEADERS!")
+            dataframes = get_dataframes(filename, header=None, delim=delimiter, skip_rows=freetext_offset+1)
         print("[DEBUG] Successfully got dataframes!")
     data2.close()
 
@@ -72,41 +75,29 @@ def extract_columnar_metadata(filename, pass_fail=False, lda_preamble=False, nul
     # Iterate over each dataframe to extract values.
     df_metadata = []
     for df in dataframes:
-        print(df)
 
-        # df = df.str.split(",")
-
+        # TODO: Need # rows and metadata aggregation.
         metadata = extract_dataframe_metadata(df, header_col_labels)
+        print(metadata)
+
         df_metadata.append(metadata)
 
 
 def extract_dataframe_metadata(df, header):
 
-    print("HEADERS:" + str(header))
-
-    t0 = time.time()
-
     # Get only the numeric columns in data frame.
     ndf = df._get_numeric_data()
 
-    print("NDF: " + str(ndf))
-
     # Get only the string columns in data frame.
-    sdf = df.select_dtypes(include=[object])  # TODO: Get k most-occurring values (max five).
+    sdf = df.select_dtypes(include=[object])
 
-    print("SDF: " + str(ndf))
-
-
-    tuple_list = []
+    ndf_tuples = []
 
     for col in ndf:
 
         largest = df.nlargest(3, columns=col, keep='first')  # Output dataframe ordered by col.
         smallest = df.nsmallest(3, columns=col, keep='first')
         the_mean = ndf[col].mean()
-
-        print(the_mean)
-
 
         # Use GROUP_BY and then MEAN.
         col_maxs = largest[col]
@@ -121,18 +112,29 @@ def extract_dataframe_metadata(df, header):
             minn.append(minnum)
 
         # (header_name (or index), [max1, max2, max3], [min1, min2, min3], avg)
-        the_tuple = (col, minn, maxn, the_mean) #TODO: Header_NAME and avg.
-        tuple_list.append((len(ndf), the_tuple))
+        # TODO: Header
+        ndf_tuple = {"col_id": col, "metadata": {"num_rows": len(ndf), "min_n": minn, "max_n": maxn, "mean": the_mean}}
+        ndf_tuples.append((len(ndf), ndf_tuple))
 
-        # print(the_tuple)
+    # Now get the nonnumeric data tags.
+    top_modes = {}
+    for col in sdf:
+        # Mode tags represent the three most prevalent values from each paged dataframe.
+        nonnumeric_top_3_df = sdf[col].value_counts().head(3)
 
-    return tuple_list
+        # TODO: Separate these values by column in the outputted dict. 
+        for row in nonnumeric_top_3_df.iteritems():
+            top_modes[row[0]] = row[1]
+
+    df_metadata = {"numeric": ndf_tuples, "nonnumeric": top_modes}
+
+    return df_metadata
 
 
 def get_delimiter(filename, numlines):
 
     # Step 1: Load last min_lines into dataframe.  Just to ensure it can be done.
-    mini_df = pd.read_csv(filename, skiprows = numlines-MIN_ROWS, error_bad_lines=False)
+    mini_df = pd.read_csv(filename, skiprows=numlines-MIN_ROWS, error_bad_lines=False)
 
     # Step 2: Get the delimiter of the last n lines.
     s = csv.Sniffer()
@@ -140,24 +142,20 @@ def get_delimiter(filename, numlines):
         i = 1
         delims = []
         for line in fil:
-            #print(line)
-            #line = line.encode('utf-8').strip()
             if i > numlines - MIN_ROWS and ('=' not in line):
-                #print(line)
                 delims.append(s.sniff(line).delimiter)
             i += 1
 
-        #print(delims)
         if delims.count(delims[0]) == len(delims):
             return delims[0]
         else:
             raise NonUniformDelimiter("Error in get_delimiter")
 
 
-def get_dataframes(filename, header, delim, skip_rows = 0, dataframe_size = 1000):
+def get_dataframes(filename, header, delim, skip_rows=0, dataframe_size = 1000):
 
-    skip_rows = 82
-    iter_csv = pd.read_csv(filename, sep=delim, chunksize=100000, header=None, skiprows=skip_rows, error_bad_lines=False, iterator=True)
+    iter_csv = pd.read_csv(filename, sep=delim, chunksize=100000, header=None, skiprows=skip_rows,
+                           error_bad_lines=False, iterator=True)
 
     return iter_csv
 
@@ -203,7 +201,7 @@ def get_header_info(data, delim):
             elif i > preamble_length:
                 break
 
-        return (preamble_length, header)
+        return preamble_length, header
 
 
 def _get_preamble(data, delim):
@@ -281,4 +279,6 @@ def _last_preamble_line_bin_search(field_cnt_dict, target_field_num, cur_row, up
     # get_last_preamble_line(f, delim=',', start_point=100, upper_bd=5, lower_bd=210)
 
 
-extract_columnar_metadata('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/no_headers')
+# extract_columnar_metadata('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/no_headers')
+# extract_columnar_metadata('./tests/test_files/tab_delim')
+extract_columnar_metadata('./tests/test_files/freetext_header')
