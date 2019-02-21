@@ -137,7 +137,7 @@ def extract_columnar_metadata(filename):
     print(grand_mdata)
     # *** First, we want to aggregate our individual pieces of NUMERIC metadata *** #
 
-    # TODO: Return the nonnumeric half as well. 
+    # TODO: Return the nonnumeric half as well.
     return grand_mdata
 
 
@@ -174,8 +174,6 @@ def extract_dataframe_metadata(df, header):
             ndf_tuple = {"col_id": header[col], "metadata": {"num_rows": len(ndf), "min_n": minn, "max_n": maxn, "mean": the_mean}}
         else:
             ndf_tuple = {"col_id": "__{}__".format(col), "metadata": {"num_rows": len(ndf), "min_n": minn, "max_n": maxn, "mean": the_mean}}
-
-        # TODO: Make this a list instead of a dict.
         ndf_tuples.append(ndf_tuple)
 
     # TODO: Repeated column names? They would just overwrite.
@@ -241,7 +239,6 @@ def count_fields(dataframe):
 def get_header_info(data, delim):
 
     data.seek(0)
-    # TODO: Get the line count from the binary search. This is an extra scan for no reason.
     # Get the line count.
     line_count = 0
     for _ in data:
