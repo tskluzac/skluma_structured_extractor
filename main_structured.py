@@ -82,6 +82,64 @@ def extract_columnar_metadata(filename):
 
         df_metadata.append(metadata)
 
+    grand_mdata = {"numeric": {}, "nonnumeric": {}}
+    # Now REDUCE metadata by iterating over dataframes.
+
+    g_means = {}
+    g_three_max = {}
+    g_three_min = {}
+    g_num_rows = {}
+
+    for md_piece in df_metadata:
+
+        # *** First, we want to aggregate our individual pieces of NUMERIC metadata *** #
+        if "numeric" in md_piece:
+            col_list = md_piece["numeric"]
+            # For every column-level dict of numeric data...
+
+            for col in col_list:
+                # TODO: Create rolling update of mean, maxs, mins, row_counts.
+                if col["col_id"] not in g_means:
+                    g_means[col["col_id"]] = col["metadata"]["mean"]
+
+                    g_three_max[col["col_id"]] = {}
+                    g_three_max[col["col_id"]]["max_n"] = col["metadata"]["max_n"]
+
+                    g_three_min[col["col_id"]] = {}
+                    g_three_min[col["col_id"]]["min_n"] = col["metadata"]["min_n"]
+
+                    g_num_rows[col["col_id"]] = {}
+                    g_num_rows[col["col_id"]]["num_rows"] = col["metadata"]["num_rows"]
+
+                else:
+                    g_means[col["col_id"]] += col["metadata"]["mean"]
+                    g_three_max[col["col_id"]]["max_n"].extend(col["metadata"]["max_n"])
+                    g_three_min[col["col_id"]]["min_n"].extend(col["metadata"]["min_n"])
+                    g_num_rows[col["col_id"]]["num_rows"] += col["metadata"]["num_rows"]
+
+        if "nonnumeric" in md_piece:
+            pass
+
+    for col_key in g_means:  # Just use the g_means key, because its keys must appear in all summary stats anyways.
+
+        print(col_key)
+
+        grand_mdata["numeric"][col_key] = {}
+        grand_mdata["numeric"][col_key]["mean"] = float(g_means[col_key]/g_num_rows[col_key]["num_rows"])
+        grand_mdata["numeric"][col_key]["num_rows"] = g_num_rows[col_key]["num_rows"]
+
+        sorted_max = sorted(g_three_max[col_key]["max_n"], reverse=True)
+        sorted_min = sorted(g_three_min[col_key]["min_n"], reverse=False)
+
+        grand_mdata["numeric"][col_key]["max_n"] = sorted_max[:3]
+        grand_mdata["numeric"][col_key]["min_n"] = sorted_min[:3]
+
+    print(grand_mdata)
+    # *** First, we want to aggregate our individual pieces of NUMERIC metadata *** #
+
+    # TODO: Return the nonnumeric half as well. 
+    return grand_mdata
+
 
 def extract_dataframe_metadata(df, header):
 
@@ -90,9 +148,6 @@ def extract_dataframe_metadata(df, header):
 
     # Get only the string columns in data frame.
     sdf = df.select_dtypes(include=[object])
-
-
-    print(sdf)
 
     ndf_tuples = []
 
@@ -120,6 +175,7 @@ def extract_dataframe_metadata(df, header):
         else:
             ndf_tuple = {"col_id": "__{}__".format(col), "metadata": {"num_rows": len(ndf), "min_n": minn, "max_n": maxn, "mean": the_mean}}
 
+        # TODO: Make this a list instead of a dict.
         ndf_tuples.append(ndf_tuple)
 
     # TODO: Repeated column names? They would just overwrite.
@@ -131,20 +187,18 @@ def extract_dataframe_metadata(df, header):
         # Mode tags represent the three most prevalent values from each paged dataframe.
         nonnumeric_top_3_df = sdf[col].value_counts().head(3)
 
+        col_modes = {}
         for row in nonnumeric_top_3_df.iteritems():
 
-            top_modes[row[0]] = row[1]
+            col_modes[row[0]] = row[1]
 
         if header is not None:
-            top_modes[header[col]] = {"top3_modes": top_modes}
+            top_modes[header[col]] = {"top3_modes": col_modes}
 
         else:
-            top_modes[col] = {"top3_mode": top_modes}
-    # TODO: START HERE -- Separate these values by column in the outputted dict.
+            top_modes["__{}__".format(col)] = {"top3_modes": col_modes}
 
     nonnumeric_metadata.append(top_modes)
-
-
     df_metadata = {"numeric": ndf_tuples, "nonnumeric": nonnumeric_metadata}
 
     return df_metadata
@@ -153,7 +207,7 @@ def extract_dataframe_metadata(df, header):
 def get_delimiter(filename, numlines):
 
     # Step 1: Load last min_lines into dataframe.  Just to ensure it can be done.
-    mini_df = pd.read_csv(filename, skiprows=numlines-MIN_ROWS, error_bad_lines=False)
+    pd.read_csv(filename, skiprows=numlines-MIN_ROWS, error_bad_lines=False)
 
     # Step 2: Get the delimiter of the last n lines.
     s = csv.Sniffer()
@@ -173,7 +227,7 @@ def get_delimiter(filename, numlines):
 
 def get_dataframes(filename, header, delim, skip_rows=0, dataframe_size = 1000):
 
-    iter_csv = pd.read_csv(filename, sep=delim, chunksize=100000, header=None, skiprows=skip_rows,
+    iter_csv = pd.read_csv(filename, sep=delim, chunksize=10, header=None, skiprows=skip_rows,
                            error_bad_lines=False, iterator=True)
 
     return iter_csv
@@ -300,4 +354,4 @@ def _last_preamble_line_bin_search(field_cnt_dict, target_field_num, cur_row, up
 
 # extract_columnar_metadata('/home/skluzacek/PycharmProjects/skluma_structured_extractor/tests/test_files/no_headers')
 # extract_columnar_metadata('./tests/test_files/tab_delim')
-extract_columnar_metadata('./tests/test_files/no_headers')
+extract_columnar_metadata('./tests/test_files/freetext_header')
